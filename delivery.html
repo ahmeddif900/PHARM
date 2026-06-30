@@ -588,8 +588,41 @@ select{
     <div class="ms-block"><small>الكاش</small><b id="ms_cash">0 ج.م</b></div>
     <div class="ms-block ms-net"><small>الصافي</small><b id="ms_net">0 ج.م</b></div>
   </div>
+<button id="saveToFirebaseBtn" class="btn-time start" type="button">حفظ التقفيل في قاعدة البيانات</button>
+<script type="module">
+/* ---------- Firebase Setup ---------- */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-<script>
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCeVHkiZmMsweui1ZNAJKsTEJlNQYg3iuY",
+  authDomain: "pharm-7b71a.firebaseapp.com",
+  projectId: "pharm-7b71a",
+  storageBucket: "pharm-7b71a.firebasestorage.app",
+  messagingSenderId: "422760369118",
+  appId: "1:422760369118:web:79046658a5c6a84dea2b4f",
+  measurementId: "G-Y7GHKEGM1Z"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// جلب بيانات العملاء مرة واحدة عند فتح الصفحة لتشغيل الإكمال التلقائي للعنوان
+let loadedCustomers = [];
+async function loadCustomersForAutoFill() {
+  try {
+    const querySnapshot = await getDocs(collection(db, "customers"));
+    querySnapshot.forEach((doc) => {
+      loadedCustomers.push(doc.data());
+    });
+  } catch (e) {
+    console.error("Error loading customers for autofill", e);
+  }
+}
+loadCustomersForAutoFill();
+
 /* ---------- Utilities ---------- */
 const $ = (s, r=document)=>r.querySelector(s);
 const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
@@ -817,7 +850,7 @@ deliveryList.addEventListener('input', (e)=>{
     // --- CUSTOMER AUTO-FILL LOGIC ---
     if (field === 'customerMobile') {
       const typedPhone = e.target.value.trim();
-      const savedCustomers = JSON.parse(localStorage.getItem('ssp_customers')) || [];
+      const savedCustomers = loadedCustomers; // استخدام البيانات المسحوبة من فايربيز
       const matchedCustomer = savedCustomers.find(c => c.phone1 === typedPhone || c.phone2 === typedPhone);
       
       if (matchedCustomer) {
@@ -970,7 +1003,48 @@ function escapeHtml(s){
     .replace(/</g,'&lt;')
     .replace(/>/g,'&gt;');
 }
+/* ---------- Firebase Save ---------- */
+document.getElementById('saveToFirebaseBtn')?.addEventListener('click', async () => {
+  const totals = calcTotals();
+  const signer = $('#signerName').value.trim();
+  const dateVal = $('#reportDate').value;
+  
+  if (!signer) {
+    alert("برجاء كتابة اسم المسؤول أولاً قبل الحفظ!");
+    return;
+  }
 
+  // تجميع كل بيانات الشيفت في كائن واحد
+  const shiftReportData = {
+    reportDate: dateVal,
+    signerName: signer,
+    shiftStart: $('#shiftStart').value,
+    shiftEnd: $('#shiftEnd').value,
+    extraNotes: $('#extraNotes').value,
+    deliveries: deliveries, // مصفوفة الطلبات
+    expenses: expenses,     // مصفوفة المصروفات
+    totals: totals,         // الإجماليات
+    timestamp: new Date().toISOString()
+  };
+
+  try {
+    const btn = document.getElementById('saveToFirebaseBtn');
+    btn.textContent = 'جاري الحفظ...';
+    btn.disabled = true;
+
+    // إرسال البيانات إلى جدول جديد باسم "delivery_reports"
+    await addDoc(collection(db, "delivery_reports"), shiftReportData);
+    
+    alert("تم حفظ التقفيل في قاعدة البيانات بنجاح!");
+    btn.textContent = 'حفظ التقفيل في قاعدة البيانات';
+    btn.disabled = false;
+    
+  } catch (error) {
+    console.error("Error saving document: ", error);
+    alert("حدث خطأ أثناء الحفظ! تأكد من اتصالك بالإنترنت.");
+    document.getElementById('saveToFirebaseBtn').disabled = false;
+  }
+});
 /* ---------- Init ---------- */
 addDelivery();
 renderExpenses();
