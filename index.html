@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام إدارة صيدليات شريف شعبان</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root { --navy: #1a2a6b; --bg: #f3f4f7; --hover: #22368a; }
+  body { margin: 0; font-family: 'Cairo', sans-serif; display: flex; height: 100vh; overflow: hidden; background: var(--bg); }
+  
+  /* Sidebar Styling */
+  .sidebar { width: 250px; background: var(--navy); color: white; display: flex; flex-direction: column; box-shadow: -2px 0 10px rgba(0,0,0,0.1); z-index: 10; }
+  .sidebar h2 { text-align: center; padding: 20px 0; border-bottom: 1px solid rgba(255,255,255,0.1); margin: 0; font-size: 18px; }
+  .nav-btn { background: none; border: none; color: white; padding: 15px 20px; text-align: right; font-family: 'Cairo'; font-size: 16px; cursor: pointer; transition: 0.3s; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .nav-btn:hover, .nav-btn.active { background: var(--hover); border-right: 4px solid #1b7a3a; }
+  
+  /* Main Content iframe */
+  .content { flex: 1; display: flex; flex-direction: column; }
+  iframe { flex: 1; width: 100%; border: none; }
+</style>
+</head>
+<body>
+
+  <div class="sidebar">
+    <h2>صيدليات شريف شعبان</h2>
+    <button class="nav-btn active" onclick="loadApp('shift.html', this)">تقفيل الشيفت</button>
+    <button class="nav-btn" onclick="loadApp('delivery.html', this)">تقفيل الدليفري</button>
+    <button class="nav-btn" onclick="loadApp('invoices.html', this)">فواتير الموردين</button>
+    <button class="nav-btn" onclick="loadApp('customer.html', this)">إدارة العملاء</button>
+	<button class="nav-btn" onclick="createBackup()" style="color: #f59e0b;">إنشاء نسخة احتياطية</button>
+	<button class="nav-btn" onclick="showBackups()" style="color: #f59e0b;">استعادة نسخة احتياطية</button>
+  </div>
+
+  <div class="content">
+    <iframe id="app-frame" src="shift.html"></iframe>
+  </div>
+
+  <script>
+    function loadApp(file, btnElement) {
+      // Load the selected file into the iframe
+      document.getElementById('app-frame').src = file;
+      
+      // Update active button styling
+      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+      btnElement.classList.add('active');
+    }
+	function createBackup() {
+    fetch('http://localhost:8000/api/backup', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            alert(data.message); // Will say "Backup created successfully!"
+        })
+        .catch(error => alert('Error creating backup: ' + error));
+	}
+	// 1. Get the list of backups to show to the user
+	fetch('http://localhost:8000/api/backups')
+    .then(res => res.json())
+    .then(data => console.log("Available backups: ", data.backups));
+
+	// 2. Restore a specific file (e.g., passing 'pharmacy_backup_20260628_100600.db')
+	function restoreBackup(filename) {
+	    if(confirm('Are you sure? This will overwrite your current data with the backup!')) {
+	        fetch(`http://localhost:8000/api/restore/${filename}`, { method: 'POST' })
+	            .then(res => res.json())
+	            .then(data => alert(data.message))
+	            .catch(err => alert('Restore error: ' + err));
+	    }
+	}
+	const BACKUP_API = 'http://localhost:8000/api';
+
+// Create a new backup
+async function createBackup() {
+    try {
+        const response = await fetch(`${BACKUP_API}/backup`, { method: 'POST' });
+        const data = await response.json();
+        if (response.ok) {
+            alert("تم إنشاء النسخة الاحتياطية بنجاح!\n" + data.backup_file);
+        } else {
+            alert("فشل إنشاء النسخة الاحتياطية: " + data.detail);
+        }
+    } catch (error) {
+        alert("خطأ في الاتصال بالخادم: " + error);
+    }
+}
+
+// Show list of backups and allow restoring
+async function showBackups() {
+    try {
+        const response = await fetch(`${BACKUP_API}/backups`);
+        const data = await response.json();
+        
+        if (data.backups.length === 0) {
+            alert("لا توجد نسخ احتياطية متاحة.");
+            return;
+        }
+
+        // Format the list for the user to choose
+        let backupList = data.backups.map((b, index) => `${index + 1}: ${b}`).join('\n');
+        let choice = prompt(`النسخ الاحتياطية المتاحة:\n\n${backupList}\n\nأدخل رقم النسخة التي تريد استعادتها (أو اترك الحقل فارغاً للإلغاء):`);
+
+        if (choice && !isNaN(choice)) {
+            const selectedIndex = parseInt(choice) - 1;
+            if (data.backups[selectedIndex]) {
+                restoreBackup(data.backups[selectedIndex]);
+            } else {
+                alert("رقم غير صحيح.");
+            }
+        }
+    } catch (error) {
+        alert("فشل في جلب قائمة النسخ الاحتياطية.");
+    }
+}
+
+// Perform the restore
+async function restoreBackup(filename) {
+    if(confirm(`تحذير: استعادة النسخة "${filename}" ستمسح البيانات الحالية وتستبدلها بالبيانات القديمة. هل أنت متأكد؟`)) {
+        try {
+            const response = await fetch(`${BACKUP_API}/restore/${filename}`, { method: 'POST' });
+            const data = await response.json();
+            if (response.ok) {
+                alert("تم استعادة قاعدة البيانات بنجاح! يرجى تحديث الصفحة.");
+                // Reload the iframe to show restored data
+                document.querySelector('iframe').contentWindow.location.reload();
+            } else {
+                alert("فشل الاستعادة: " + data.detail);
+            }
+        } catch (error) {
+            alert("خطأ في الاتصال بالخادم.");
+        }
+    }
+}
+  </script>
+</body>
+</html>

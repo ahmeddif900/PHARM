@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إدارة العملاء - صيدليات شريف شعبان | Customer Management</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root { --navy: #1a2a6b; --bg: #f3f4f7; --card: #ffffff; --line: #dfe3ed; --red: #c62828; --green: #1b7a3a; --line-strong: #c8cfdf; }
+  body { font-family: 'Cairo', sans-serif; background: var(--bg); margin: 0; padding: 20px; }
+  .container { max-width: 900px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+  .header { text-align: center; margin-bottom: 20px; color: var(--navy); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  .input { width: 100%; padding: 10px; border: 1.5px solid var(--line-strong); border-radius: 10px; font-family: 'Cairo'; margin-top: 5px; box-sizing: border-box; outline: none; transition: 0.2s; }
+  .input:focus { border-color: var(--navy); box-shadow: 0 0 0 3px rgba(26,42,107,.12); }
+  .btn { background: var(--navy); color: white; padding: 12px 20px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; width: 100%; font-family: 'Cairo'; font-size: 16px; transition: 0.2s; }
+  .btn:hover { background: #22368a; }
+  .btn-update { background: var(--green); }
+  .btn-update:hover { background: #168131; }
+  .table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+  .table th, .table td { padding: 12px; border-bottom: 1px solid var(--line); text-align: right; }
+  .table th { background: #f4f6fb; color: var(--navy); }
+  .action-btns { display: flex; gap: 8px; }
+  .btn-delete { background: #fff5f5; color: var(--red); border: 1px solid #efd0d0; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-family: 'Cairo'; font-weight: bold; }
+  .btn-delete:hover { background: #ffeaea; }
+  .btn-edit { background: #f4f6ff; color: var(--navy); border: 1px solid var(--line-strong); padding: 5px 10px; border-radius: 6px; cursor: pointer; font-family: 'Cairo'; font-weight: bold; }
+  .btn-edit:hover { background: #e4ebff; }
+  
+  /* New Search Styles */
+  .search-wrap { display: flex; flex-wrap: wrap; gap: 15px; background: #fcfdff; padding: 15px; border-radius: 12px; border: 1.5px dashed var(--line-strong); margin-bottom: 15px; }
+  .search-col { flex: 1; min-width: 200px; }
+  .search-label { font-size: 13px; color: var(--navy); font-weight: bold; display: block; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>قاعدة بيانات العملاء</h1>
+    <p>صيدليات شريف شعبان</p>
+  </div>
+
+  <div class="card">
+    <form id="customerForm">
+      <div class="grid">
+        <div>
+          <label>كود العميل (ID)</label>
+          <input type="text" id="custId" class="input" required>
+        </div>
+        <div>
+          <label>اسم العميل</label>
+          <input type="text" id="custName" class="input" required>
+        </div>
+        <div>
+          <label>رقم الهاتف 1</label>
+          <input type="tel" id="custPhone1" class="input" required>
+        </div>
+        <div>
+          <label>رقم الهاتف 2 (اختياري)</label>
+          <input type="tel" id="custPhone2" class="input">
+        </div>
+        <div>
+          <label>العنوان / المنطقة</label>
+          <input type="text" id="custAddress" class="input" required>
+        </div>
+        <div>
+          <label>نسبة الخصم (%)</label>
+          <input type="number" id="custDiscount" class="input" min="0" max="100" placeholder="مثال: 10">
+        </div>
+        <div style="grid-column: 1 / -1;">
+          <label>ملاحظات إضافية</label>
+          <input type="text" id="custNotes" class="input" placeholder="مثال: يفضل التوصيل بعد العصر">
+        </div>
+      </div>
+      <button type="submit" id="submitBtn" class="btn" style="margin-top: 20px;">حفظ العميل</button>
+      <button type="button" id="cancelEditBtn" class="btn" style="margin-top: 10px; background: #fff; color: var(--navy); border: 1.5px solid var(--navy); display: none;">إلغاء التعديل</button>
+    </form>
+  </div>
+
+  <div class="card" style="overflow-x: auto;">
+    
+    <div class="search-wrap">
+      <div class="search-col">
+        <label class="search-label">🔍 بحث بالكود (ID):</label>
+        <input type="text" id="searchId" class="input" style="margin-top:0" placeholder="اكتب كود العميل...">
+      </div>
+      <div class="search-col">
+        <label class="search-label">🔍 بحث برقم الهاتف:</label>
+        <input type="tel" id="searchPhone" class="input" style="margin-top:0" placeholder="اكتب رقم الهاتف...">
+      </div>
+    </div>
+
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>الاسم</th>
+          <th>الهواتف</th>
+          <th>المنطقة</th>
+          <th>الخصم</th>
+          <th>ملاحظات</th>
+          <th>إجراءات</th>
+        </tr>
+      </thead>
+      <tbody id="customerTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+	// Getting data from the Database
+	async function fetchCustomers() {
+	    const response = await fetch('http://127.0.0.1:8000/api/customers');
+	    customers = await response.json();
+	    renderTable(); // Your existing function to draw the table
+	}
+	
+	// Call this when the page loads
+	fetchCustomers();
+	
+	// Saving data to the Database
+	form.addEventListener('submit', async function(e) {
+	    e.preventDefault();
+	    const customerData = {
+	      id: document.getElementById('custId').value,
+	      name: document.getElementById('custName').value,
+	      phone1: document.getElementById('custPhone1').value,
+	      phone2: document.getElementById('custPhone2').value,
+	      address: document.getElementById('custAddress').value,
+	      discount: document.getElementById('custDiscount').value,
+	      notes: document.getElementById('custNotes').value
+	    };
+	    
+	    // Send to Python Backend
+	    await fetch('http://127.0.0.1:8000/api/customers', {
+	        method: 'POST',
+	        headers: { 'Content-Type': 'application/json' },
+	        body: JSON.stringify(customerData)
+	    });
+	
+	    form.reset();
+	    fetchCustomers(); // Refresh the table from the database
+	});  
+  let editingIndex = -1; 
+
+  const form = document.getElementById('customerForm');
+  const submitBtn = document.getElementById('submitBtn');
+  const cancelEditBtn = document.getElementById('cancelEditBtn');
+  const searchIdInput = document.getElementById('searchId');
+  const searchPhoneInput = document.getElementById('searchPhone');
+
+  function renderTable() {
+    const tbody = document.getElementById('customerTableBody');
+    const idQuery = searchIdInput.value.trim().toLowerCase();
+    const phoneQuery = searchPhoneInput.value.trim().toLowerCase();
+    
+    tbody.innerHTML = '';
+    
+    customers.forEach((c, index) => {
+      // Check ID match
+      const matchId = idQuery === '' || (c.id || '').toLowerCase().includes(idQuery);
+      
+      // Check Phone match (checks both phone1 and phone2)
+      const matchPhone = phoneQuery === '' || 
+                        (c.phone1 || '').toLowerCase().includes(phoneQuery) || 
+                        (c.phone2 || '').toLowerCase().includes(phoneQuery);
+
+      // Render only if BOTH active search bars match the customer
+      if (matchId && matchPhone) {
+        tbody.innerHTML += `
+          <tr>
+            <td>${c.id || ''}</td>
+            <td>${c.name || ''}</td>
+            <td dir="ltr">${c.phone1 || ''} <br> <small>${c.phone2 || ''}</small></td>
+            <td>${c.address || ''}</td>
+            <td>${c.discount ? c.discount + '%' : '-'}</td>
+            <td>${c.notes || ''}</td>
+            <td>
+              <div class="action-btns">
+                <button class="btn-edit" onclick="editCustomer(${index})" title="تعديل">✎</button>
+                <button class="btn-delete" onclick="deleteCustomer(${index})" title="حذف">✕</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+    });
+  }
+
+  // Listen for typing in both search bars
+  searchIdInput.addEventListener('input', renderTable);
+  searchPhoneInput.addEventListener('input', renderTable);
+
+  window.editCustomer = function(index) {
+    const c = customers[index];
+    document.getElementById('custId').value = c.id || '';
+    document.getElementById('custName').value = c.name || '';
+    document.getElementById('custPhone1').value = c.phone1 || '';
+    document.getElementById('custPhone2').value = c.phone2 || '';
+    document.getElementById('custAddress').value = c.address || '';
+    document.getElementById('custDiscount').value = c.discount || '';
+    document.getElementById('custNotes').value = c.notes || '';
+
+    editingIndex = index;
+    
+    submitBtn.textContent = 'تحديث بيانات العميل';
+    submitBtn.classList.add('btn-update');
+    cancelEditBtn.style.display = 'block';
+    
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  cancelEditBtn.addEventListener('click', function() {
+    form.reset();
+    editingIndex = -1;
+    submitBtn.textContent = 'حفظ العميل';
+    submitBtn.classList.remove('btn-update');
+    cancelEditBtn.style.display = 'none';
+  });
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const customerData = {
+      id: document.getElementById('custId').value,
+      name: document.getElementById('custName').value,
+      phone1: document.getElementById('custPhone1').value,
+      phone2: document.getElementById('custPhone2').value,
+      address: document.getElementById('custAddress').value,
+      discount: document.getElementById('custDiscount').value,
+      notes: document.getElementById('custNotes').value
+    };
+    
+    if (editingIndex === -1) {
+      customers.push(customerData);
+    } else {
+      customers[editingIndex] = customerData;
+      editingIndex = -1;
+      submitBtn.textContent = 'حفظ العميل';
+      submitBtn.classList.remove('btn-update');
+      cancelEditBtn.style.display = 'none';
+    }
+
+    localStorage.setItem('ssp_customers', JSON.stringify(customers));
+    form.reset();
+    renderTable(); 
+  });
+
+  window.deleteCustomer = function(index) {
+    if (confirm('هل أنت متأكد من حذف هذا العميل؟')) {
+      if (editingIndex === index) {
+        cancelEditBtn.click();
+      }
+      customers.splice(index, 1);
+      localStorage.setItem('ssp_customers', JSON.stringify(customers));
+      renderTable();
+    }
+  };
+
+  renderTable();
+</script>
+</body>
+</html>
