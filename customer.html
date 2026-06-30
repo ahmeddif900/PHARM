@@ -109,156 +109,80 @@
   </div>
 </div>
 
-<script>
-	// Getting data from the Database
-	async function fetchCustomers() {
-	    const response = await fetch('http://127.0.0.1:8000/api/customers');
-	    customers = await response.json();
-	    renderTable(); // Your existing function to draw the table
-	}
-	
-	// Call this when the page loads
-	fetchCustomers();
-	
-	// Saving data to the Database
-	form.addEventListener('submit', async function(e) {
-	    e.preventDefault();
-	    const customerData = {
-	      id: document.getElementById('custId').value,
-	      name: document.getElementById('custName').value,
-	      phone1: document.getElementById('custPhone1').value,
-	      phone2: document.getElementById('custPhone2').value,
-	      address: document.getElementById('custAddress').value,
-	      discount: document.getElementById('custDiscount').value,
-	      notes: document.getElementById('custNotes').value
-	    };
-	    
-	    // Send to Python Backend
-	    await fetch('http://127.0.0.1:8000/api/customers', {
-	        method: 'POST',
-	        headers: { 'Content-Type': 'application/json' },
-	        body: JSON.stringify(customerData)
-	    });
-	
-	    form.reset();
-	    fetchCustomers(); // Refresh the table from the database
-	});  
-  let editingIndex = -1; 
+<script type="module">
+  // 1. Import Firebase tools
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+  import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-  const form = document.getElementById('customerForm');
-  const submitBtn = document.getElementById('submitBtn');
-  const cancelEditBtn = document.getElementById('cancelEditBtn');
-  const searchIdInput = document.getElementById('searchId');
-  const searchPhoneInput = document.getElementById('searchPhone');
-
-  function renderTable() {
-    const tbody = document.getElementById('customerTableBody');
-    const idQuery = searchIdInput.value.trim().toLowerCase();
-    const phoneQuery = searchPhoneInput.value.trim().toLowerCase();
-    
-    tbody.innerHTML = '';
-    
-    customers.forEach((c, index) => {
-      // Check ID match
-      const matchId = idQuery === '' || (c.id || '').toLowerCase().includes(idQuery);
-      
-      // Check Phone match (checks both phone1 and phone2)
-      const matchPhone = phoneQuery === '' || 
-                        (c.phone1 || '').toLowerCase().includes(phoneQuery) || 
-                        (c.phone2 || '').toLowerCase().includes(phoneQuery);
-
-      // Render only if BOTH active search bars match the customer
-      if (matchId && matchPhone) {
-        tbody.innerHTML += `
-          <tr>
-            <td>${c.id || ''}</td>
-            <td>${c.name || ''}</td>
-            <td dir="ltr">${c.phone1 || ''} <br> <small>${c.phone2 || ''}</small></td>
-            <td>${c.address || ''}</td>
-            <td>${c.discount ? c.discount + '%' : '-'}</td>
-            <td>${c.notes || ''}</td>
-            <td>
-              <div class="action-btns">
-                <button class="btn-edit" onclick="editCustomer(${index})" title="تعديل">✎</button>
-                <button class="btn-delete" onclick="deleteCustomer(${index})" title="حذف">✕</button>
-              </div>
-            </td>
-          </tr>
-        `;
-      }
-    });
-  }
-
-  // Listen for typing in both search bars
-  searchIdInput.addEventListener('input', renderTable);
-  searchPhoneInput.addEventListener('input', renderTable);
-
-  window.editCustomer = function(index) {
-    const c = customers[index];
-    document.getElementById('custId').value = c.id || '';
-    document.getElementById('custName').value = c.name || '';
-    document.getElementById('custPhone1').value = c.phone1 || '';
-    document.getElementById('custPhone2').value = c.phone2 || '';
-    document.getElementById('custAddress').value = c.address || '';
-    document.getElementById('custDiscount').value = c.discount || '';
-    document.getElementById('custNotes').value = c.notes || '';
-
-    editingIndex = index;
-    
-    submitBtn.textContent = 'تحديث بيانات العميل';
-    submitBtn.classList.add('btn-update');
-    cancelEditBtn.style.display = 'block';
-    
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  // 2. Paste YOUR config from the Firebase Website here:
+  const firebaseConfig = {
+    apiKey: "AIzaSyYOUR-API-KEY-HERE",
+    authDomain: "sherif-pharmacy.firebaseapp.com",
+    projectId: "sherif-pharmacy",
+    storageBucket: "sherif-pharmacy.appspot.com",
+    messagingSenderId: "123456789",
+    appId: "1:123456789:web:abcdef"
   };
 
-  cancelEditBtn.addEventListener('click', function() {
-    form.reset();
-    editingIndex = -1;
-    submitBtn.textContent = 'حفظ العميل';
-    submitBtn.classList.remove('btn-update');
-    cancelEditBtn.style.display = 'none';
-  });
+  // 3. Initialize Firebase and Firestore
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
 
-  form.addEventListener('submit', function(e) {
+  // --- DATABASE FUNCTIONS ---
+
+  // Function to Load Customers from Firebase
+  async function loadCustomers() {
+    try {
+      const querySnapshot = await getDocs(collection(db, "customers"));
+      customers = []; // Clear the local array
+      querySnapshot.forEach((doc) => {
+        // doc.data() is never undefined for query doc snapshots
+        let data = doc.data();
+        data.firebaseId = doc.id; // Save the invisible Firebase ID just in case
+        customers.push(data);
+      });
+      renderTable(); // Call your existing function to draw the table
+    } catch (error) {
+      console.error("Error loading documents: ", error);
+      alert("خطأ في تحميل البيانات من فايربيز");
+    }
+  }
+
+  // Load data as soon as the page opens
+  document.addEventListener('DOMContentLoaded', loadCustomers);
+
+  // Function to Save a Customer to Firebase
+  const form = document.getElementById('yourFormId'); // Make sure this matches your form ID
+  
+  form.addEventListener('submit', async function(e) {
     e.preventDefault();
+    
+    // Gather data from your inputs
     const customerData = {
-      id: document.getElementById('custId').value,
       name: document.getElementById('custName').value,
       phone1: document.getElementById('custPhone1').value,
       phone2: document.getElementById('custPhone2').value,
       address: document.getElementById('custAddress').value,
       discount: document.getElementById('custDiscount').value,
-      notes: document.getElementById('custNotes').value
+      notes: document.getElementById('custNotes').value,
+      timestamp: new Date().toISOString() // Good practice to know when it was added
     };
     
-    if (editingIndex === -1) {
-      customers.push(customerData);
-    } else {
-      customers[editingIndex] = customerData;
-      editingIndex = -1;
-      submitBtn.textContent = 'حفظ العميل';
-      submitBtn.classList.remove('btn-update');
-      cancelEditBtn.style.display = 'none';
+    try {
+      // Send directly to the "customers" collection in Firebase
+      const docRef = await addDoc(collection(db, "customers"), customerData);
+      console.log("Document written with ID: ", docRef.id);
+      
+      form.reset();
+      
+      // Reload the table to show the new customer
+      loadCustomers();
+      
+    } catch (e) {
+      console.error("Error adding document: ", e);
+      alert("حدث خطأ أثناء الحفظ!");
     }
-
-    localStorage.setItem('ssp_customers', JSON.stringify(customers));
-    form.reset();
-    renderTable(); 
   });
-
-  window.deleteCustomer = function(index) {
-    if (confirm('هل أنت متأكد من حذف هذا العميل؟')) {
-      if (editingIndex === index) {
-        cancelEditBtn.click();
-      }
-      customers.splice(index, 1);
-      localStorage.setItem('ssp_customers', JSON.stringify(customers));
-      renderTable();
-    }
-  };
-
-  renderTable();
 </script>
 </body>
 </html>
