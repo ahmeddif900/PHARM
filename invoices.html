@@ -203,29 +203,70 @@ th{color:var(--navy);background:#f8fafc}
 </div>
 
 </div>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-<script>
-const LS_INV = 'ss_invoices_v2';
-const LS_SUP = 'ss_suppliers_v1';
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCeVHkiZmMsweui1ZNAJKsTEJlNQYg3iuY",
+  authDomain: "pharm-7b71a.firebaseapp.com",
+  projectId: "pharm-7b71a",
+  storageBucket: "pharm-7b71a.firebasestorage.app",
+  messagingSenderId: "422760369118",
+  appId: "1:422760369118:web:79046658a5c6a84dea2b4f",
+  measurementId: "G-Y7GHKEGM1Z"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 const LS_WA = 'ss_wa_number';
 
-let invoices = JSON.parse(localStorage.getItem(LS_INV) || '[]');
-// migrate v1 invoices if present
-if(invoices.length===0){
-  const old = JSON.parse(localStorage.getItem('ss_invoices_v1') || '[]');
-  if(old.length){ invoices = old.map(o=>Object.assign(o,{d15:0,d18:0,d20:0,d25:0})); }
-}
-let suppliers = JSON.parse(localStorage.getItem(LS_SUP) || 'null') || [
-  {name:'ابن سينا / Ibn Sina', type:'company'},
-  {name:'فارما أوفرسيز / Pharma Overseas', type:'company'},
-  {name:'المتحدة / United', type:'company'},
-  {name:'المصرية / El Masreya', type:'store'},
-  {name:'راميدا ستور / Rameda Store', type:'store'}
-];
+let invoices = [];
+let suppliers = [];
 let returns = [];
 let editId = null;
 
-function saveAll(){ localStorage.setItem(LS_INV, JSON.stringify(invoices)); localStorage.setItem(LS_SUP, JSON.stringify(suppliers)); }
+// جلب البيانات من فايربيز عند فتح الصفحة
+async function loadDataFromFirebase() {
+  try {
+    // جلب الموردين
+    const supSnap = await getDocs(collection(db, "suppliers"));
+    if (!supSnap.empty) {
+      supSnap.forEach(doc => suppliers.push({ id: doc.id, ...doc.data() }));
+    } else {
+      // إذا كانت القائمة فارغة في فايربيز، يتم إضافة الموردين الافتراضيين
+      const defaultSuppliers = [
+        {name:'ابن سينا / Ibn Sina', type:'company'},
+        {name:'فارما أوفرسيز / Pharma Overseas', type:'company'},
+        {name:'المتحدة / United', type:'company'},
+        {name:'المصرية / El Masreya', type:'store'},
+        {name:'راميدا ستور / Rameda Store', type:'store'}
+      ];
+      for (const s of defaultSuppliers) {
+        const docRef = await addDoc(collection(db, "suppliers"), s);
+        suppliers.push({ id: docRef.id, ...s });
+      }
+    }
+
+    // جلب الفواتير
+    const invSnap = await getDocs(collection(db, "invoices"));
+    invSnap.forEach(doc => {
+      invoices.push({ id: doc.id, ...doc.data() });
+    });
+
+    refreshSuppliers();
+    renderList();
+  } catch (error) {
+    console.error("Error loading data:", error);
+    alert("خطأ في الاتصال بقاعدة البيانات");
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadDataFromFirebase);
+
 function fmt(n){ return Number(n||0).toFixed(2) }
 
 function refreshSuppliers(){
@@ -240,7 +281,7 @@ function refreshSuppliers(){
     if([...sel.options].some(o=>o.value===val)) sel.value=val;
   });
 }
-refreshSuppliers();
+
 document.getElementById('inv_date').valueAsDate = new Date();
 
 function toggleDiscountBox(){
@@ -258,6 +299,7 @@ function getDiscVals(){
     d25: parseFloat(document.getElementById('d25').value)||0
   };
 }
+
 function calcDiscSum(){
   const d = getDiscVals();
   const sum = d.d15+d.d18+d.d20+d.d25;
@@ -292,6 +334,7 @@ function renderReturns(){
   box.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{returns.splice(+b.dataset.del,1); renderReturns(); calcTotals();});
   calcTotals();
 }
+
 function calcTotals(){
   const total = parseFloat(document.getElementById('inv_total').value)||0;
   const retTotal = returns.reduce((s,r)=>s + (parseFloat(r.qty)||0)*(parseFloat(r.price)||0),0);
@@ -304,17 +347,27 @@ document.getElementById('inv_total').oninput = calcTotals;
 document.getElementById('add_return_btn').onclick = ()=>{ returns.push({name:'',qty:1,price:0}); renderReturns(); };
 renderReturns();
 
-document.getElementById('add_supplier_btn').onclick = ()=>{
+// حفظ مورد جديد في فايربيز
+document.getElementById('add_supplier_btn').onclick = async ()=>{
   const name = prompt('اسم المورد الجديد / New supplier name:');
   if(!name) return;
   const type = document.getElementById('sup_type').value;
-  suppliers.push({name, type});
-  saveAll(); refreshSuppliers();
-  document.getElementById('sup_name').value = name;
-  toggleDiscountBox();
+  
+  try {
+      const newSup = { name, type };
+      const docRef = await addDoc(collection(db, "suppliers"), newSup);
+      suppliers.push({ id: docRef.id, ...newSup });
+      refreshSuppliers();
+      document.getElementById('sup_name').value = name;
+      toggleDiscountBox();
+  } catch (error) {
+      console.error("Error adding supplier:", error);
+      alert("حدث خطأ أثناء حفظ المورد");
+  }
 };
 
-document.getElementById('save_btn').onclick = ()=>{
+// حفظ الفاتورة في فايربيز
+document.getElementById('save_btn').onclick = async ()=>{
   const calc = calcTotals();
   const disc = getDiscVals();
   const isCompany = document.getElementById('sup_type').value === 'company';
@@ -322,8 +375,8 @@ document.getElementById('save_btn').onclick = ()=>{
   if(isCompany && Math.abs(discSum - calc.total) > 0.5){
     if(!confirm('مجموع تقسيم الخصم ('+fmt(discSum)+') لا يساوي إجمالي الفاتورة ('+fmt(calc.total)+'). حفظ على أي حال؟')) return;
   }
-  const inv = {
-    id: editId || Date.now(),
+  
+  const invData = {
     supplier_type: document.getElementById('sup_type').value,
     supplier_name: document.getElementById('sup_name').value,
     invoice_no: document.getElementById('inv_no').value.trim(),
@@ -334,15 +387,38 @@ document.getElementById('save_btn').onclick = ()=>{
     notes: document.getElementById('inv_notes').value,
     created_at: new Date().toISOString()
   };
-  if(!inv.supplier_name || !inv.invoice_no || !inv.date){ alert('اكمل اسم المورد ورقم الفاتورة والتاريخ'); return; }
-  if(editId){ invoices = invoices.map(x=>x.id===editId?inv:x); editId=null; } else { invoices.push(inv); }
-  saveAll();
-  document.getElementById('save_msg').textContent = 'تم الحفظ ✓ / Saved';
-  setTimeout(()=>document.getElementById('save_msg').textContent='',2000);
-  document.getElementById('inv_no').value=''; document.getElementById('inv_total').value=''; document.getElementById('inv_notes').value='';
-  ['d15','d18','d20','d25'].forEach(id=>document.getElementById(id).value=0);
-  returns=[]; renderReturns(); calcTotals();
-  renderList();
+  
+  if(!invData.supplier_name || !invData.invoice_no || !invData.date){ alert('اكمل اسم المورد ورقم الفاتورة والتاريخ'); return; }
+  
+  const btn = document.getElementById('save_btn');
+  btn.textContent = 'جاري الحفظ...';
+  btn.disabled = true;
+
+  try {
+      if(editId){ 
+          await setDoc(doc(db, "invoices", String(editId)), invData);
+          invData.id = editId;
+          invoices = invoices.map(x=>x.id===editId?invData:x); 
+          editId=null; 
+      } else { 
+          const docRef = await addDoc(collection(db, "invoices"), invData);
+          invData.id = docRef.id;
+          invoices.push(invData); 
+      }
+      
+      document.getElementById('save_msg').textContent = 'تم الحفظ ✓ / Saved';
+      setTimeout(()=>document.getElementById('save_msg').textContent='',2000);
+      document.getElementById('inv_no').value=''; document.getElementById('inv_total').value=''; document.getElementById('inv_notes').value='';
+      ['d15','d18','d20','d25'].forEach(id=>document.getElementById(id).value=0);
+      returns=[]; renderReturns(); calcTotals();
+      renderList();
+  } catch (error) {
+      console.error("Error saving invoice:", error);
+      alert("حدث خطأ أثناء حفظ الفاتورة");
+  } finally {
+      btn.textContent = 'حفظ الفاتورة';
+      btn.disabled = false;
+  }
 };
 
 document.getElementById('reset_btn').onclick = ()=>{ editId=null; document.getElementById('inv_no').value=''; document.getElementById('inv_total').value=''; document.getElementById('inv_notes').value=''; ['d15','d18','d20','d25'].forEach(id=>document.getElementById(id).value=0); returns=[]; renderReturns(); };
@@ -375,8 +451,8 @@ function renderList(){
     '<td>'+inv.date+'</td><td>'+inv.supplier_name+'</td><td>'+(inv.supplier_type==='company'?'شركة':'مخزن')+'</td><td>'+inv.invoice_no+'</td>'+
     '<td>'+fmt(inv.total)+'</td><td>'+fmt(inv.returns_total)+'</td><td><b>'+fmt(inv.net_payable)+'</b></td>'+
     '<td class="small">'+discTxt+'</td>'+
-    '<td class="no-print"><button class="btn btn-ghost btn-sm" onclick="editInv('+inv.id+')">تعديل</button> '+
-    '<button class="btn btn-ghost btn-sm" onclick="delInv('+inv.id+')">حذف</button></td>'+
+    '<td class="no-print"><button class="btn btn-ghost btn-sm" onclick="editInv(\''+inv.id+'\')">تعديل</button> '+
+    '<button class="btn btn-ghost btn-sm" onclick="delInv(\''+inv.id+'\')">حذف</button></td>'+
   '</tr>'
   }).join('') || '<tr><td colspan="9" class="muted">لا توجد فواتير</td></tr>';
   document.getElementById('list_count').textContent = rows.length + ' فاتورة';
@@ -385,9 +461,10 @@ function renderList(){
   document.getElementById('list_net').textContent = fmt(rows.reduce((s,x)=>s+x.net_payable,0));
 }
 ['f_search','f_supplier','f_from','f_to'].forEach(id=>{ const el=document.getElementById(id); if(el) el.oninput=renderList; });
+
 window.editInv = (id)=>{
   const inv = invoices.find(x=>x.id===id); if(!inv) return;
-  editId=id;
+  editId = id;
   document.getElementById('sup_type').value = inv.supplier_type;
   refreshSuppliers(); document.getElementById('sup_name').value = inv.supplier_name;
   document.getElementById('inv_no').value = inv.invoice_no;
@@ -403,7 +480,19 @@ window.editInv = (id)=>{
   document.querySelector('[data-tab="add"]').click();
   window.scrollTo(0,0);
 };
-window.delInv = (id)=>{ if(confirm('حذف الفاتورة؟')){ invoices = invoices.filter(x=>x.id!==id); saveAll(); renderList(); }};
+
+// مسح فاتورة من فايربيز
+window.delInv = async (id)=>{ 
+  if(confirm('حذف الفاتورة؟')){ 
+    try {
+        await deleteDoc(doc(db, "invoices", String(id)));
+        invoices = invoices.filter(x=>x.id!==id); 
+        renderList(); 
+    } catch(error) {
+        alert("حدث خطأ أثناء الحذف");
+    }
+  }
+};
 
 // Statement
 function calcStatementCash(){
@@ -493,49 +582,54 @@ document.getElementById('export_json_btn').onclick = ()=>{
   const blob = new Blob([JSON.stringify({invoices, suppliers}, null, 2)], {type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='invoices_backup_'+new Date().toISOString().slice(0,10)+'.json'; a.click();
 };
-document.getElementById('import_json_input').onchange = e=>{
+
+document.getElementById('import_json_input').onchange = async (e) =>{
   const f=e.target.files[0]; if(!f) return;
   const reader = new FileReader();
-  reader.onload = ()=>{
+  reader.onload = async ()=>{
     try{
       const data = JSON.parse(reader.result);
       const incoming = data.invoices || data || [];
       let added=0;
-      incoming.forEach(inv=>{
+      for (const inv of incoming) {
         const key = (inv.supplier_name||'')+'|'+(inv.invoice_no||'')+'|'+(inv.date||'');
         const exists = invoices.some(x => (x.supplier_name+'|'+x.invoice_no+'|'+x.date)===key);
-        if(!exists){ invoices.push(inv); added++; }
-      });
-      if(data.suppliers){ data.suppliers.forEach(s=>{ if(!suppliers.find(x=>x.name===s.name)) suppliers.push(s); }); }
-      saveAll(); refreshSuppliers(); renderList();
-      alert('تم الاستيراد. فواتير جديدة: '+added);
+        if(!exists){ 
+          const docRef = await addDoc(collection(db, "invoices"), inv);
+          inv.id = docRef.id;
+          invoices.push(inv); 
+          added++; 
+        }
+      }
+      if(data.suppliers){ 
+        for (const s of data.suppliers) {
+            if(!suppliers.find(x=>x.name===s.name)) {
+                const docRef = await addDoc(collection(db, "suppliers"), s);
+                suppliers.push({id: docRef.id, ...s});
+            }
+        }
+      }
+      refreshSuppliers(); renderList();
+      alert('تم الاستيراد بنجاح. فواتير جديدة: '+added);
     }catch(err){ alert('ملف غير صالح: '+err.message); }
   };
   reader.readAsText(f);
 };
-document.getElementById('clear_all_btn').onclick = ()=>{
+
+// مسح الكل من فايربيز
+document.getElementById('clear_all_btn').onclick = async ()=>{
   if(confirm('مسح كل فواتير الموردين؟ لا يمكن التراجع') && confirm('تأكيد نهائي؟')){
-    invoices=[]; saveAll(); renderList(); alert('تم المسح');
+    try {
+        for (const inv of invoices) {
+            await deleteDoc(doc(db, "invoices", String(inv.id)));
+        }
+        invoices=[]; 
+        renderList(); 
+        alert('تم مسح جميع الفواتير من قاعدة البيانات بنجاح.');
+    } catch(err) {
+        alert("حدث خطأ أثناء المسح");
+    }
   }
 };
-
-renderList();
-function sendDataToServer(formData) {
-    fetch('/save_data', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData) // formData is a JS object of your inputs
-    })
-    .then(response => response.json())
-    .then(data => {
-        alert('تم الحفظ بنجاح!'); // Success message
-    })
-    .catch((error) => {
-        console.error('Error:', error);
-    });
-}
 </script>
-<script>(function(){var loc=location.href.replace(/#.*$/,"");var ATTR_NAMES=["data-product-id","data-productid","data-product_id","product-id","productid","product_id","data-source-entity-id","source-entity-id","source_entity_id","data-product","data-metadata","data-meta"];var DATASET_KEYS=["productId","productid","product_id","sourceEntityId","sourceentityid","source_entity_id","product","metadata","meta"];function readProductId(value){if(typeof value!=="string"||value.length===0)return null;if(/^[0-9]{6,}$/.test(value))return value;var match=value.match(/(?:product(?:_|-)?id|source(?:_|-)?entity(?:_|-)?id)["'=:\s]+([0-9]{6,})/i);return match?match[1]:null}function extractProductId(start){for(var node=start;node&&node!==document.body;node=node.parentElement){for(var i=0;i<ATTR_NAMES.length;i++){var attrValue=node.getAttribute&&node.getAttribute(ATTR_NAMES[i]);var attrProductId=readProductId(attrValue);if(attrProductId)return attrProductId}var dataset=node.dataset||null;if(dataset){for(var j=0;j<DATASET_KEYS.length;j++){var dataValue=dataset[DATASET_KEYS[j]];var dataProductId=readProductId(dataValue);if(dataProductId)return dataProductId}}}return null}document.addEventListener("click",function(e){var target=e.target instanceof Element?e.target:null;if(!target)return;var a=target.closest?target.closest("a[href]"):null;if(!a||!a.href||!/^https?:\/\//.test(a.href))return;if(a.href.replace(/#.*$/,"")===loc)return;var productId=extractProductId(target)||extractProductId(a);if(!productId)return;e.preventDefault();parent.postMessage({type:"ecto-artifact-link-click",productId:productId},"*")},true)})();</script></body>
 </html>
