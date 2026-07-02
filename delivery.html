@@ -748,12 +748,19 @@ function addDelivery(data={}){
   if(searchDeliveryPhone.value) {
     searchDeliveryPhone.value = '';
   }
-  
+  $$('.input, textarea').forEach(el => {
+  el.addEventListener('input', saveLocalDraft);
+  });
+
   renderDeliveries();
 }
 
 function removeDelivery(id){
   deliveries = deliveries.filter(d => d.id !== id);
+  $$('.input, textarea').forEach(el => {
+  el.addEventListener('input', saveLocalDraft);
+  });
+
   renderDeliveries();
 }
 
@@ -783,10 +790,18 @@ function renderExpenses(){
 
 function addExpense(data={}){
   expenses.push({id:eId++, amount:'', reason:'', ...data});
+  $$('.input, textarea').forEach(el => {
+  el.addEventListener('input', saveLocalDraft);
+  });
+
   renderExpenses();
 }
 function removeExpense(id){
   expenses = expenses.filter(e => e.id !== id);
+  $$('.input, textarea').forEach(el => {
+  el.addEventListener('input', saveLocalDraft);
+  });
+
   renderExpenses();
 }
 
@@ -994,6 +1009,46 @@ $('#resetBtn').addEventListener('click', ()=>{
   calcTotals();
   window.scrollTo({top:0, behavior:'smooth'});
 });
+const DRAFT_KEY = 'ssp_delivery_draft';
+
+// Saves the entire page state to localStorage
+function saveLocalDraft() {
+  const draft = {
+    reportDate: $('#reportDate').value,
+    shiftStart: $('#shiftStart').value,
+    shiftEnd: $('#shiftEnd').value,
+    extraNotes: $('#extraNotes').value,
+    signerName: $('#signerName').value,
+    handoverTime: $('#handoverTime').value,
+    deliveries: deliveries,
+    expenses: expenses,
+    dId: dId,
+    eId: eId
+  };
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+}
+
+// Loads the draft back when the page reopens
+function loadLocalDraft() {
+  const saved = localStorage.getItem(DRAFT_KEY);
+  if (saved) {
+    try {
+      const draft = JSON.parse(saved);
+      $('#reportDate').value = draft.reportDate || '';
+      $('#shiftStart').value = draft.shiftStart || '';
+      $('#shiftEnd').value = draft.shiftEnd || '';
+      $('#extraNotes').value = draft.extraNotes || '';
+      $('#signerName').value = draft.signerName || '';
+      $('#handoverTime').value = draft.handoverTime || '';
+      deliveries = draft.deliveries || [];
+      expenses = draft.expenses || [];
+      dId = draft.dId || 1;
+      eId = draft.eId || 1;
+    } catch (e) {
+      console.error("Error restoring local draft", e);
+    }
+  }
+}
 
 /* ---------- Helpers ---------- */
 function escapeHtml(s){
@@ -1046,9 +1101,12 @@ document.getElementById('saveToFirebaseBtn')?.addEventListener('click', async ()
   }
 });
 /* ---------- Init ---------- */
-addDelivery();
+loadLocalDraft();
+if (deliveries.length === 0) { addDelivery(); }
+renderDeliveries();
 renderExpenses();
 calcTotals();
+
 </script>
 </body>
 </html>
