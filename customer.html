@@ -156,6 +156,27 @@
       alert("خطأ في تحميل البيانات من فايربيز");
     }
   }
+  function renderTable() {
+  const tbody = document.getElementById('customerTableBody');
+  tbody.innerHTML = ''; // Clear table
+  
+  customers.forEach((cust) => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${cust.customerId || ''}</td>
+      <td>${cust.name || ''}</td>
+      <td>${cust.phone1 || ''} ${cust.phone2 ? '/ ' + cust.phone2 : ''}</td>
+      <td>${cust.address || ''}</td>
+      <td>${cust.discount || 0}%</td>
+      <td>${cust.notes || ''}</td>
+      <td>
+        <button class="btn-delete" onclick="deleteCustomer('${cust.firebaseId}')">حذف</button>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
 
   // Load data as soon as the page opens
   document.addEventListener('DOMContentLoaded', loadCustomers);
