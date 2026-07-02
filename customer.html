@@ -115,7 +115,6 @@
   import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
   // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
   const firebaseConfig = {
     apiKey: "AIzaSyCeVHkiZmMsweui1ZNAJKsTEJlNQYg3iuY",
     authDomain: "pharm-7b71a.firebaseapp.com",
@@ -130,6 +129,9 @@
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
+  // Array to hold customer data locally
+  let customers = []; 
+
   // --- DATABASE FUNCTIONS ---
 
   // Function to Load Customers from Firebase
@@ -138,12 +140,17 @@
       const querySnapshot = await getDocs(collection(db, "customers"));
       customers = []; // Clear the local array
       querySnapshot.forEach((doc) => {
-        // doc.data() is never undefined for query doc snapshots
         let data = doc.data();
-        data.firebaseId = doc.id; // Save the invisible Firebase ID just in case
+        data.firebaseId = doc.id; 
         customers.push(data);
       });
-      renderTable(); // Call your existing function to draw the table
+      
+      // Note: You need to make sure you have a renderTable() function defined 
+      // in your code to display the data! If you haven't written it yet, 
+      // comment out the line below so your code doesn't crash.
+      if (typeof renderTable === "function") {
+        renderTable(); 
+      }
     } catch (error) {
       console.error("Error loading documents: ", error);
       alert("خطأ في تحميل البيانات من فايربيز");
@@ -153,21 +160,22 @@
   // Load data as soon as the page opens
   document.addEventListener('DOMContentLoaded', loadCustomers);
 
-  // Function to Save a Customer to Firebase
-  const form = document.getElementById('yourFormId'); // Make sure this matches your form ID
+  // FIX: Match the exact ID of your HTML form
+  const form = document.getElementById('customerForm'); 
   
   form.addEventListener('submit', async function(e) {
-    e.preventDefault();
+    e.preventDefault(); // Prevents the page from refreshing
     
     // Gather data from your inputs
     const customerData = {
+      customerId: document.getElementById('custId').value, // Added missing ID field
       name: document.getElementById('custName').value,
       phone1: document.getElementById('custPhone1').value,
       phone2: document.getElementById('custPhone2').value,
       address: document.getElementById('custAddress').value,
       discount: document.getElementById('custDiscount').value,
       notes: document.getElementById('custNotes').value,
-      timestamp: new Date().toISOString() // Good practice to know when it was added
+      timestamp: new Date().toISOString() 
     };
     
     try {
@@ -175,7 +183,7 @@
       const docRef = await addDoc(collection(db, "customers"), customerData);
       console.log("Document written with ID: ", docRef.id);
       
-      form.reset();
+      form.reset(); // Clear the form
       
       // Reload the table to show the new customer
       loadCustomers();
