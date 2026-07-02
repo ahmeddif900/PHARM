@@ -589,13 +589,13 @@ select{
     <div class="ms-block ms-net"><small>الصافي</small><b id="ms_net">0 ج.م</b></div>
   </div>
 <button id="saveToFirebaseBtn" class="btn-time start" type="button">حفظ التقفيل في قاعدة البيانات</button>
+<button id="saveToFirebaseBtn" class="btn-time start" type="button">حفظ التقفيل في قاعدة البيانات</button>
 <script type="module">
 /* ---------- Firebase Setup ---------- */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 // Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyCeVHkiZmMsweui1ZNAJKsTEJlNQYg3iuY",
   authDomain: "pharm-7b71a.firebaseapp.com",
@@ -713,7 +713,6 @@ function renderDeliveries(){
   const tableWrap = document.querySelector('.delivery-table-wrap');
   const phoneQuery = searchDeliveryPhone.value.trim().toLowerCase();
 
-  // Filter the rows for display based on the search input
   const filteredDeliveries = deliveries.filter(d => {
     return phoneQuery === '' || (d.customerMobile || '').toLowerCase().includes(phoneQuery);
   });
@@ -734,33 +733,23 @@ function renderDeliveries(){
     deliveryList.innerHTML = filteredDeliveries.map(deliveryRowTemplate).join('');
   }
   
-  // Totals ALWAYS calculate based on the FULL 'deliveries' array, not the filtered one!
   calcTotals();
 }
 
-// Re-render when typing in the search bar
 searchDeliveryPhone.addEventListener('input', renderDeliveries);
 
 function addDelivery(data={}){
   deliveries.push({ id: dId++, orderNo:'', driverName:'', customerMobile:'', area:'', startTime:'', endTime:'', orderTotal:'', cash:'', fee:'', pay:'cash', notes:'', ...data });
   
-  // Clear search when adding a new row so you can see it
   if(searchDeliveryPhone.value) {
     searchDeliveryPhone.value = '';
   }
-  $$('.input, textarea').forEach(el => {
-  el.addEventListener('input', saveLocalDraft);
-  });
 
   renderDeliveries();
 }
 
 function removeDelivery(id){
   deliveries = deliveries.filter(d => d.id !== id);
-  $$('.input, textarea').forEach(el => {
-  el.addEventListener('input', saveLocalDraft);
-  });
-
   renderDeliveries();
 }
 
@@ -790,24 +779,16 @@ function renderExpenses(){
 
 function addExpense(data={}){
   expenses.push({id:eId++, amount:'', reason:'', ...data});
-  $$('.input, textarea').forEach(el => {
-  el.addEventListener('input', saveLocalDraft);
-  });
-
   renderExpenses();
 }
 function removeExpense(id){
   expenses = expenses.filter(e => e.id !== id);
-  $$('.input, textarea').forEach(el => {
-  el.addEventListener('input', saveLocalDraft);
-  });
-
   renderExpenses();
 }
 
 /* ---------- Totals ---------- */
 function calcTotals(){
-  const rows = deliveries; // Always use full array
+  const rows = deliveries; 
   const count = rows.length;
   let orderValue = 0, cash = 0, fees = 0, totalMinutes = 0;
   
@@ -847,6 +828,9 @@ function calcTotals(){
   const netBox = $('#netBox');
   if(net >= 0){ netBox.classList.add('cash-positive'); } else { netBox.classList.remove('cash-positive'); }
 
+  // إصلاح أساسي: حفظ مسودة البيانات محلياً فور حساب أي إجماليات جديدة تلقائياً
+  saveLocalDraft();
+
   return {count, totalMinutes, orderValue, cash, fees, net, expTotal, netAfter};
 }
 
@@ -865,7 +849,7 @@ deliveryList.addEventListener('input', (e)=>{
     // --- CUSTOMER AUTO-FILL LOGIC ---
     if (field === 'customerMobile') {
       const typedPhone = e.target.value.trim();
-      const savedCustomers = loadedCustomers; // استخدام البيانات المسحوبة من فايربيز
+      const savedCustomers = loadedCustomers; 
       const matchedCustomer = savedCustomers.find(c => c.phone1 === typedPhone || c.phone2 === typedPhone);
       
       if (matchedCustomer) {
@@ -994,6 +978,7 @@ $('#whatsappBtn').addEventListener('click', ()=>{
 $('#printBtn').addEventListener('click', ()=> window.print());
 $('#resetBtn').addEventListener('click', ()=>{
   if(!confirm('هل تريد مسح كل البيانات الحالية؟\nClear all current entries?')) return;
+  localStorage.removeItem(DRAFT_KEY); // تفريغ التخزين المحلي عند التصفير
   deliveries = [];
   expenses = [];
   dId = 1; eId = 1;
@@ -1009,17 +994,18 @@ $('#resetBtn').addEventListener('click', ()=>{
   calcTotals();
   window.scrollTo({top:0, behavior:'smooth'});
 });
+
 const DRAFT_KEY = 'ssp_delivery_draft';
 
 // Saves the entire page state to localStorage
 function saveLocalDraft() {
   const draft = {
-    reportDate: $('#reportDate').value,
-    shiftStart: $('#shiftStart').value,
-    shiftEnd: $('#shiftEnd').value,
-    extraNotes: $('#extraNotes').value,
-    signerName: $('#signerName').value,
-    handoverTime: $('#handoverTime').value,
+    reportDate: $('#reportDate')?.value || '',
+    shiftStart: $('#shiftStart')?.value || '',
+    shiftEnd: $('#shiftEnd')?.value || '',
+    extraNotes: $('#extraNotes')?.value || '',
+    signerName: $('#signerName')?.value || '',
+    handoverTime: $('#handoverTime')?.value || '',
     deliveries: deliveries,
     expenses: expenses,
     dId: dId,
@@ -1034,12 +1020,12 @@ function loadLocalDraft() {
   if (saved) {
     try {
       const draft = JSON.parse(saved);
-      $('#reportDate').value = draft.reportDate || '';
-      $('#shiftStart').value = draft.shiftStart || '';
-      $('#shiftEnd').value = draft.shiftEnd || '';
-      $('#extraNotes').value = draft.extraNotes || '';
-      $('#signerName').value = draft.signerName || '';
-      $('#handoverTime').value = draft.handoverTime || '';
+      if($('#reportDate')) $('#reportDate').value = draft.reportDate || '';
+      if($('#shiftStart')) $('#shiftStart').value = draft.shiftStart || '';
+      if($('#shiftEnd')) $('#shiftEnd').value = draft.shiftEnd || '';
+      if($('#extraNotes')) $('#extraNotes').value = draft.extraNotes || '';
+      if($('#signerName')) $('#signerName').value = draft.signerName || '';
+      if($('#handoverTime')) $('#handoverTime').value = draft.handoverTime || '';
       deliveries = draft.deliveries || [];
       expenses = draft.expenses || [];
       dId = draft.dId || 1;
@@ -1069,16 +1055,15 @@ document.getElementById('saveToFirebaseBtn')?.addEventListener('click', async ()
     return;
   }
 
-  // تجميع كل بيانات الشيفت في كائن واحد
   const shiftReportData = {
     reportDate: dateVal,
     signerName: signer,
     shiftStart: $('#shiftStart').value,
     shiftEnd: $('#shiftEnd').value,
     extraNotes: $('#extraNotes').value,
-    deliveries: deliveries, // مصفوفة الطلبات
-    expenses: expenses,     // مصفوفة المصروفات
-    totals: totals,         // الإجماليات
+    deliveries: deliveries, 
+    expenses: expenses,     
+    totals: totals,         
     timestamp: new Date().toISOString()
   };
 
@@ -1087,12 +1072,14 @@ document.getElementById('saveToFirebaseBtn')?.addEventListener('click', async ()
     btn.textContent = 'جاري الحفظ...';
     btn.disabled = true;
 
-    // إرسال البيانات إلى جدول جديد باسم "delivery_reports"
     await addDoc(collection(db, "delivery_reports"), shiftReportData);
     
     alert("تم حفظ التقفيل في قاعدة البيانات بنجاح!");
     btn.textContent = 'حفظ التقفيل في قاعدة البيانات';
     btn.disabled = false;
+    
+    // اختيار اختياري: مسح المسودة المحلية بعد الرفع الناجح لقاعدة البيانات حتى لا تتكرر البيانات
+    localStorage.removeItem(DRAFT_KEY);
     
   } catch (error) {
     console.error("Error saving document: ", error);
@@ -1100,12 +1087,24 @@ document.getElementById('saveToFirebaseBtn')?.addEventListener('click', async ()
     document.getElementById('saveToFirebaseBtn').disabled = false;
   }
 });
+
 /* ---------- Init ---------- */
+// 1. استدعاء المسودة المخزنة أولاً
 loadLocalDraft();
-if (deliveries.length === 0) { addDelivery(); }
+
+// 2. إذا لم تكن هناك بيانات مخزنة، قم بإنشاء صف فارغ افتراضي للبدء
+if (deliveries.length === 0) { 
+  addDelivery(); 
+}
+
+// 3. بناء الجدولين وحساب القيم
 renderDeliveries();
 renderExpenses();
 calcTotals();
+
+// 4. مستمع عام على مستوى الصفحة لمراقبة أي مدخلات نصية علوية (اسم المسؤول، التاريخ، الملاحظات) لحفظها فوراً
+document.addEventListener('input', saveLocalDraft);
+document.addEventListener('change', saveLocalDraft);
 
 </script>
 </body>
