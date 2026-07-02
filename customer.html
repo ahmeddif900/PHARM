@@ -80,7 +80,6 @@
   </div>
 
   <div class="card" style="overflow-x: auto;">
-    
     <div class="search-wrap">
       <div class="search-col">
         <label class="search-label">🔍 بحث بالكود (ID):</label>
@@ -110,9 +109,9 @@
 </div>
 
 <script type="module">
-  // 1. Import Firebase tools
+  // 1. Import Firebase tools (Added deleteDoc, doc, updateDoc)
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
   // Your web app's Firebase configuration
   const firebaseConfig = {
@@ -131,86 +130,159 @@
 
   // Array to hold customer data locally
   let customers = []; 
+  
+  // Track if we are editing an existing customer
+  let editingFirebaseId = null;
 
   // --- DATABASE FUNCTIONS ---
 
-  // Function to Load Customers from Firebase
   async function loadCustomers() {
     try {
       const querySnapshot = await getDocs(collection(db, "customers"));
-      customers = []; // Clear the local array
+      customers = [];
       querySnapshot.forEach((doc) => {
         let data = doc.data();
         data.firebaseId = doc.id; 
         customers.push(data);
       });
-      
-      // Note: You need to make sure you have a renderTable() function defined 
-      // in your code to display the data! If you haven't written it yet, 
-      // comment out the line below so your code doesn't crash.
-      if (typeof renderTable === "function") {
-        renderTable(); 
-      }
+      renderTable(); 
     } catch (error) {
       console.error("Error loading documents: ", error);
       alert("خطأ في تحميل البيانات من فايربيز");
     }
   }
-  function renderTable() {
-  const tbody = document.getElementById('customerTableBody');
-  tbody.innerHTML = ''; // Clear table
-  
-  customers.forEach((cust) => {
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${cust.customerId || ''}</td>
-      <td>${cust.name || ''}</td>
-      <td>${cust.phone1 || ''} ${cust.phone2 ? '/ ' + cust.phone2 : ''}</td>
-      <td>${cust.address || ''}</td>
-      <td>${cust.discount || 0}%</td>
-      <td>${cust.notes || ''}</td>
-      <td>
-        <button class="btn-delete" onclick="deleteCustomer('${cust.firebaseId}')">حذف</button>
-      </td>
-    `;
-    tbody.appendChild(row);
-  });
-}
 
+  function renderTable() {
+    const tbody = document.getElementById('customerTableBody');
+    tbody.innerHTML = ''; 
+    
+    customers.forEach((cust) => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${cust.customerId || ''}</td>
+        <td>${cust.name || ''}</td>
+        <td>${cust.phone1 || ''} ${cust.phone2 ? '/ ' + cust.phone2 : ''}</td>
+        <td>${cust.address || ''}</td>
+        <td>${cust.discount || 0}%</td>
+        <td>${cust.notes || ''}</td>
+        <td class="action-btns">
+          <button class="btn-edit" onclick="window.editCustomer('${cust.firebaseId}')">تعديل</button>
+          <button class="btn-delete" onclick="window.deleteCustomer('${cust.firebaseId}')">حذف</button>
+        </td>
+      `;
+      tbody.appendChild(row);
+    });
+  }
 
   // Load data as soon as the page opens
   document.addEventListener('DOMContentLoaded', loadCustomers);
 
-  // FIX: Match the exact ID of your HTML form
+  // --- EDIT AND DELETE FUNCTIONS (Attached to window for inline onclick access) ---
+
+  window.deleteCustomer = async function(firebaseId) {
+    if(confirm("هل أنت متأكد من حذف هذا العميل؟")) {
+      try {
+        await deleteDoc(doc(db, "customers", firebaseId));
+        alert("تم الحذف بنجاح!");
+        loadCustomers(); // Refresh table
+      } catch (error) {
+        console.error("Error deleting document: ", error);
+        alert("حدث خطأ أثناء الحذف!");
+      }
+    }
+  };
+
+  window.editCustomer = function(firebaseId) {
+    const cust = customers.find(c => c.firebaseId === firebaseId);
+    if(cust) {
+      document.getElementById('custId').value = cust.customerId || '';
+      document.getElementById('custName').value = cust.name || '';
+      document.getElementById('custPhone1').value = cust.phone1 || '';
+      document.getElementById('custPhone2').value = cust.phone2 || '';
+      document.getElementById('custAddress').value = cust.address || '';
+      document.getElementById('custDiscount').value = cust.discount || '';
+      document.getElementById('custNotes').value = cust.notes || '';
+      
+      editingFirebaseId = firebaseId; // Set edit mode
+      
+      // Update UI for editing
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.textContent = "تحديث بيانات العميل";
+      submitBtn.classList.add('btn-update');
+      document.getElementById('cancelEditBtn').style.display = "block";
+      
+      // Scroll to top to see the form
+      window.scrollTo(0, 0);
+    }
+  };
+
+  // Cancel edit mode
+  document.getElementById('cancelEditBtn').addEventListener('click', function() {
+    resetFormState();
+  });
+
+  function resetFormState() {
+    document.getElementById('customerForm').reset();
+    editingFirebaseId = null;
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.textContent = "حفظ العميل";
+    submitBtn.classList.remove('btn-update');
+    document.getElementById('cancelEditBtn').style.display = "none";
+  }
+
+  // --- FORM SUBMISSION ---
+  
   const form = document.getElementById('customerForm'); 
   
   form.addEventListener('submit', async function(e) {
-    e.preventDefault(); // Prevents the page from refreshing
+    e.preventDefault(); 
     
-    // Gather data from your inputs
+    const inputId = document.getElementById('custId').value.trim();
+    const inputPhone = document.getElementById('custPhone1').value.trim();
+
+    // 1. Check for Unique ID and Phone Number
+    // We ignore the currently editing user so we don't trigger a false duplicate error on ourselves
+    const isDuplicateId = customers.some(c => c.customerId === inputId && c.firebaseId !== editingFirebaseId);
+    const isDuplicatePhone = customers.some(c => c.phone1 === inputPhone && c.firebaseId !== editingFirebaseId);
+
+    if (isDuplicateId) {
+      alert("خطأ: كود العميل (ID) موجود مسبقاً لعميل آخر!");
+      return;
+    }
+    if (isDuplicatePhone) {
+      alert("خطأ: رقم الهاتف 1 مسجل مسبقاً لعميل آخر!");
+      return;
+    }
+    
+    // Gather data
     const customerData = {
-      customerId: document.getElementById('custId').value, // Added missing ID field
-      name: document.getElementById('custName').value,
-      phone1: document.getElementById('custPhone1').value,
-      phone2: document.getElementById('custPhone2').value,
-      address: document.getElementById('custAddress').value,
+      customerId: inputId,
+      name: document.getElementById('custName').value.trim(),
+      phone1: inputPhone,
+      phone2: document.getElementById('custPhone2').value.trim(),
+      address: document.getElementById('custAddress').value.trim(),
       discount: document.getElementById('custDiscount').value,
-      notes: document.getElementById('custNotes').value,
+      notes: document.getElementById('custNotes').value.trim(),
       timestamp: new Date().toISOString() 
     };
     
     try {
-      // Send directly to the "customers" collection in Firebase
-      const docRef = await addDoc(collection(db, "customers"), customerData);
-      console.log("Document written with ID: ", docRef.id);
+      if (editingFirebaseId) {
+        // Update existing document
+        const docRef = doc(db, "customers", editingFirebaseId);
+        await updateDoc(docRef, customerData);
+        alert("تم تحديث البيانات بنجاح!");
+      } else {
+        // Add new document
+        await addDoc(collection(db, "customers"), customerData);
+        alert("تم حفظ العميل بنجاح!");
+      }
       
-      form.reset(); // Clear the form
-      
-      // Reload the table to show the new customer
+      resetFormState();
       loadCustomers();
       
     } catch (e) {
-      console.error("Error adding document: ", e);
+      console.error("Error saving document: ", e);
       alert("حدث خطأ أثناء الحفظ!");
     }
   });
