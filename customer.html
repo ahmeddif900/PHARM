@@ -29,9 +29,11 @@
   .btn-edit:hover { background: #e4ebff; }
   
   /* New Search Styles */
-  .search-wrap { display: flex; flex-wrap: wrap; gap: 15px; background: #fcfdff; padding: 15px; border-radius: 12px; border: 1.5px dashed var(--line-strong); margin-bottom: 15px; }
+  .search-wrap { display: flex; flex-wrap: wrap; gap: 15px; background: #fcfdff; padding: 15px; border-radius: 12px; border: 1.5px dashed var(--line-strong); margin-bottom: 15px; align-items: flex-end; }
   .search-col { flex: 1; min-width: 200px; }
   .search-label { font-size: 13px; color: var(--navy); font-weight: bold; display: block; margin-bottom: 4px; }
+  .btn-export { background: var(--green); color: white; height: 46px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .btn-export:hover { background: #145c2c; }
 </style>
 </head>
 <body>
@@ -88,6 +90,9 @@
       <div class="search-col">
         <label class="search-label">🔍 بحث برقم الهاتف:</label>
         <input type="tel" id="searchPhone" class="input" style="margin-top:0" placeholder="اكتب رقم الهاتف...">
+      </div>
+      <div class="search-col" style="flex: 0 1 auto; min-width: 160px;">
+        <button type="button" id="exportExcelBtn" class="btn btn-export">📊 تصدير إلى Excel</button>
       </div>
     </div>
 
@@ -241,7 +246,6 @@
     const inputPhone = document.getElementById('custPhone1').value.trim();
 
     // 1. Check for Unique ID and Phone Number
-    // We ignore the currently editing user so we don't trigger a false duplicate error on ourselves
     const isDuplicateId = customers.some(c => c.customerId === inputId && c.firebaseId !== editingFirebaseId);
     const isDuplicatePhone = customers.some(c => c.phone1 === inputPhone && c.firebaseId !== editingFirebaseId);
 
@@ -285,6 +289,51 @@
       console.error("Error saving document: ", e);
       alert("حدث خطأ أثناء الحفظ!");
     }
+  });
+
+  // --- دالة التصدير إلى EXCEL ---
+  document.getElementById('exportExcelBtn').addEventListener('click', function() {
+    if (customers.length === 0) {
+      alert("لا توجد بيانات عملاء لتصديرها حالياً!");
+      return;
+    }
+
+    // 1. تحديد عناوين الأعمدة في ملف الإكسيل
+    const headers = ["كود العميل (ID)", "اسم العميل", "رقم الهاتف 1", "رقم الهاتف 2", "العنوان / المنطقة", "نسبة الخصم", "ملاحظات إضافية"];
+    
+    // 2. إضافة رمز الـ BOM (\uFEFF) في بداية الملف لإجبار إكسيل على قراءة اللغة العربية بشكل صحيح
+    let csvContent = "\uFEFF"; 
+    
+    // إدخال السطر الأول (العناوين)
+    csvContent += headers.map(h => `"${h.replace(/"/g, '""')}"`).join(",") + "\r\n";
+
+    // 3. التكرار لاستخراج بيانات كل عميل وتحويلها لأسطر داخل الملف
+    customers.forEach(cust => {
+      const row = [
+        cust.customerId || '',
+        cust.name || '',
+        cust.phone1 || '',
+        cust.phone2 || '',
+        cust.address || '',
+        (cust.discount || 0) + '%',
+        cust.notes || ''
+      ];
+      // تنظيف النصوص من أي علامات تنصيص قد تفسد هيكلة الملف وعزل الخلايا بالفواصل
+      csvContent += row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",") + "\r\n";
+    });
+
+    // 4. إنشاء رابط وهمي لتحميل الملف بشكل فوري وجلبه كملف CSV متوافق مع Excel
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    
+    link.setAttribute("href", url);
+    link.setAttribute("download", `قاعدة_بيانات_العملاء_${new Date().toLocaleDateString('en-US')}.csv`);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   });
 </script>
 </body>
