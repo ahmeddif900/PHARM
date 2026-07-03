@@ -590,11 +590,10 @@ select{
   </div>
 <button id="saveToFirebaseBtn" class="btn-time start" type="button">حفظ التقفيل في قاعدة البيانات</button>
 <script type="module">
-  // 1. Import Firebase tools
+  // --- 1. إعدادات Firebase ---
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-  import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+  import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-  // Your web app's Firebase configuration
   const firebaseConfig = {
     apiKey: "AIzaSyCeVHkiZmMsweui1ZNAJKsTEJlNQYg3iuY",
     authDomain: "pharm-7b71a.firebaseapp.com",
@@ -605,249 +604,225 @@ select{
     measurementId: "G-Y7GHKEGM1Z"
   };
   
-  // 3. Initialize Firebase and Firestore
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
-  // Array to hold customer data locally
-  let customers = []; 
-  let editingFirebaseId = null;
-
-  // --- HTML ELEMENTS ---
-  const form = document.getElementById('customerForm');
-  const submitBtn = document.getElementById('submitBtn');
-  const cancelEditBtn = document.getElementById('cancelEditBtn');
-  const searchIdInput = document.getElementById('searchId');
-  const searchPhoneInput = document.getElementById('searchPhone');
-  const exportBtn = document.getElementById('exportExcelBtn');
-
-  // --- DATABASE FUNCTIONS ---
-
-  async function loadCustomers() {
-    try {
-      const querySnapshot = await getDocs(collection(db, "customers"));
-      customers = [];
-      querySnapshot.forEach((doc) => {
-        let data = doc.data();
-        data.firebaseId = doc.id; 
-        customers.push(data);
-      });
-      renderTable(); 
-    } catch (error) {
-      console.error("Error loading documents: ", error);
-      alert("خطأ في تحميل البيانات من فايربيز");
-    }
-  }
-
-  // Load data as soon as the page opens
-  document.addEventListener('DOMContentLoaded', loadCustomers);
-
-  // --- DUAL SEARCH LOGIC ---
-
-  function renderTable() {
-    const tbody = document.getElementById('customerTableBody');
-    const idQuery = searchIdInput ? searchIdInput.value.trim().toLowerCase() : '';
-    const phoneQuery = searchPhoneInput ? searchPhoneInput.value.trim().toLowerCase() : '';
-    
-    tbody.innerHTML = '';
-    
-    customers.forEach((c) => {
-      // Check ID match (using customerId for Firebase version)
-      const matchId = idQuery === '' || String(c.customerId || '').toLowerCase().includes(idQuery);
-      
-      // Check Phone match (checks both phone1 and phone2)
-      const matchPhone = phoneQuery === '' || 
-                        String(c.phone1 || '').toLowerCase().includes(phoneQuery) || 
-                        String(c.phone2 || '').toLowerCase().includes(phoneQuery);
-
-      // Render only if BOTH active search bars match the customer
-      if (matchId && matchPhone) {
-        tbody.innerHTML += `
-          <tr>
-            <td>${c.customerId || ''}</td>
-            <td>${c.name || ''}</td>
-            <td dir="ltr">${c.phone1 || ''} <br> <small>${c.phone2 || ''}</small></td>
-            <td>${c.address || ''}</td>
-            <td>${c.discount ? c.discount + '%' : '-'}</td>
-            <td>${c.notes || ''}</td>
-            <td>
-              <div class="action-btns">
-                <button class="btn-edit" onclick="window.editCustomer('${c.firebaseId}')" title="تعديل">✎</button>
-                <button class="btn-delete" onclick="window.deleteCustomer('${c.firebaseId}')" title="حذف">✕</button>
-              </div>
-            </td>
-          </tr>
-        `;
-      }
-    });
-  }
-
-  // Listen for typing in both search bars
-  if (searchIdInput) searchIdInput.addEventListener('input', renderTable);
-  if (searchPhoneInput) searchPhoneInput.addEventListener('input', renderTable);
-
-
-  // --- EDIT AND DELETE FUNCTIONS ---
-
-  window.deleteCustomer = async function(firebaseId) {
-    if(confirm("هل أنت متأكد من حذف هذا العميل؟")) {
-      // If deleting the currently edited customer, reset the form
-      if (editingFirebaseId === firebaseId && cancelEditBtn) {
-        cancelEditBtn.click();
-      }
-      
-      try {
-        await deleteDoc(doc(db, "customers", firebaseId));
-        // Remove from local array immediately for UI speed, then re-render
-        customers = customers.filter(c => c.firebaseId !== firebaseId);
-        renderTable();
-      } catch (error) {
-        console.error("Error deleting document: ", error);
-        alert("حدث خطأ أثناء الحذف!");
-      }
-    }
-  };
-
-  window.editCustomer = function(firebaseId) {
-    const c = customers.find(cust => cust.firebaseId === firebaseId);
-    if(c) {
-      document.getElementById('custId').value = c.customerId || '';
-      document.getElementById('custName').value = c.name || '';
-      document.getElementById('custPhone1').value = c.phone1 || '';
-      document.getElementById('custPhone2').value = c.phone2 || '';
-      document.getElementById('custAddress').value = c.address || '';
-      document.getElementById('custDiscount').value = c.discount || '';
-      document.getElementById('custNotes').value = c.notes || '';
-      
-      editingFirebaseId = firebaseId; // Set edit mode
-      
-      // Update UI for editing
-      if (submitBtn) {
-        submitBtn.textContent = "تحديث بيانات العميل";
-        submitBtn.classList.add('btn-update');
-      }
-      if (cancelEditBtn) {
-        cancelEditBtn.style.display = "block";
-      }
-      
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
-
-  if (cancelEditBtn) {
-    cancelEditBtn.addEventListener('click', function() {
-      form.reset();
-      editingFirebaseId = null;
-      if (submitBtn) {
-        submitBtn.textContent = "حفظ العميل";
-        submitBtn.classList.remove('btn-update');
-      }
-      cancelEditBtn.style.display = "none";
-    });
-  }
-
-  // --- FORM SUBMISSION ---
+  // --- 2. تعريف عناصر الصفحة (DOM) ---
+  const deliveryList = document.getElementById('deliveryList');
+  const emptyDeliveries = document.getElementById('emptyDeliveries');
+  const addDeliveryBtn = document.getElementById('addDeliveryBtn');
   
-  if (form) {
-    form.addEventListener('submit', async function(e) {
-      e.preventDefault(); 
-      
-      const inputId = document.getElementById('custId').value.trim();
-      const inputPhone = document.getElementById('custPhone1').value.trim();
+  const expenseList = document.getElementById('expenseList');
+  const addExpenseBtn = document.getElementById('addExpenseBtn');
 
-      // Check for Unique ID and Phone Number
-      const isDuplicateId = customers.some(c => c.customerId === inputId && c.firebaseId !== editingFirebaseId);
-      const isDuplicatePhone = customers.some(c => c.phone1 === inputPhone && c.firebaseId !== editingFirebaseId);
+  // عناصر الإجماليات
+  const totals = {
+    ordersCount: document.getElementById('t_orders'),
+    time: document.getElementById('t_time'),
+    orderValue: document.getElementById('t_orderValue'),
+    cash: document.getElementById('t_cash'),
+    fees: document.getElementById('t_fees'),
+    net: document.getElementById('t_net'),
+    expTotal: document.getElementById('exp_total'),
+    expNetAfter: document.getElementById('exp_net_after')
+  };
 
-      if (isDuplicateId) {
-        alert("خطأ: كود العميل (ID) موجود مسبقاً لعميل آخر!");
-        return;
-      }
-      if (isDuplicatePhone) {
-        alert("خطأ: رقم الهاتف 1 مسجل مسبقاً لعميل آخر!");
-        return;
-      }
+  // إعداد تاريخ اليوم تلقائياً
+  document.getElementById('reportDate').valueAsDate = new Date();
+
+  // --- 3. الدوال البرمجية (Functions) ---
+
+  // دالة الحساب التلقائي
+  function calculateTotals() {
+    let sumOrdersValue = 0;
+    let sumCash = 0;
+    let sumFees = 0;
+    let sumTime = 0;
+    let ordersCount = 0;
+
+    // حساب الطلبات
+    const rows = deliveryList.querySelectorAll('.delivery-row');
+    ordersCount = rows.length;
+    
+    rows.forEach(row => {
+      const orderVal = parseFloat(row.querySelector('.order-val').value) || 0;
+      const cashVal = parseFloat(row.querySelector('.cash-col').value) || 0;
+      const feeVal = parseFloat(row.querySelector('.del-fee').value) || 0;
       
-      // Gather data
-      const customerData = {
-        customerId: inputId,
-        name: document.getElementById('custName').value.trim(),
-        phone1: inputPhone,
-        phone2: document.getElementById('custPhone2').value.trim(),
-        address: document.getElementById('custAddress').value.trim(),
-        discount: document.getElementById('custDiscount').value,
-        notes: document.getElementById('custNotes').value.trim(),
-        timestamp: new Date().toISOString() 
+      sumOrdersValue += orderVal;
+      sumCash += cashVal;
+      sumFees += feeVal;
+
+      // حساب الوقت
+      const start = row.querySelector('.start-time').value;
+      const end = row.querySelector('.end-time').value;
+      const durationCell = row.querySelector('.duration-cell');
+      
+      if (start && end) {
+        const startTime = new Date(`1970-01-01T${start}`);
+        const endTime = new Date(`1970-01-01T${end}`);
+        let diffMins = Math.round((endTime - startTime) / 60000);
+        if(diffMins < 0) diffMins += 24 * 60; // لو الوقت عدى منتصف الليل
+        sumTime += diffMins;
+        durationCell.textContent = diffMins + ' د';
+        durationCell.classList.remove('empty');
+      } else {
+        durationCell.textContent = '-';
+        durationCell.classList.add('empty');
+      }
+    });
+
+    // حساب المصروفات
+    let sumExpenses = 0;
+    const expRows = expenseList.querySelectorAll('.expense-row');
+    expRows.forEach(row => {
+      sumExpenses += parseFloat(row.querySelector('.exp-val').value) || 0;
+    });
+
+    // الصافي = الكاش + الرسوم - المصروفات
+    const netTotal = (sumCash + sumFees) - sumExpenses;
+
+    // تحديث الشاشة
+    totals.ordersCount.textContent = ordersCount;
+    totals.time.textContent = sumTime;
+    totals.orderValue.textContent = sumOrdersValue;
+    totals.cash.textContent = sumCash;
+    totals.fees.textContent = sumFees;
+    totals.expTotal.textContent = sumExpenses;
+    totals.net.textContent = netTotal;
+    totals.expNetAfter.textContent = netTotal;
+
+    // إخفاء/إظهار رسالة "لا توجد طلبات"
+    emptyDeliveries.style.display = ordersCount === 0 ? 'block' : 'none';
+  }
+
+  // إضافة طلب جديد
+  addDeliveryBtn.addEventListener('click', () => {
+    const row = document.createElement('div');
+    row.className = 'delivery-row';
+    row.innerHTML = `
+      <input type="text" class="input order-id" placeholder="رقم الأوردر">
+      <input type="text" class="input rep-name" placeholder="المندوب">
+      <input type="tel" class="input phone" placeholder="الموبايل">
+      <input type="text" class="input zone" placeholder="المنطقة">
+      <input type="time" class="input start-time">
+      <input type="time" class="input end-time">
+      <div class="duration-cell empty">-</div>
+      <input type="number" class="input order-val" placeholder="قيمة" min="0">
+      <input type="number" class="input cash-col" placeholder="كاش" min="0">
+      <input type="number" class="input del-fee" placeholder="رسوم" min="0">
+      <select class="input pay-method">
+        <option value="cash">كاش</option>
+        <option value="visa">فيزا</option>
+      </select>
+      <input type="text" class="input notes" placeholder="ملاحظات">
+      <button type="button" class="icon-btn del-btn" title="حذف">✕</button>
+    `;
+
+    // تفعيل الحساب التلقائي عند تغيير الأرقام
+    row.querySelectorAll('input').forEach(input => {
+      input.addEventListener('input', calculateTotals);
+    });
+
+    // زر الحذف
+    row.querySelector('.del-btn').addEventListener('click', () => {
+      row.remove();
+      calculateTotals();
+    });
+
+    deliveryList.appendChild(row);
+    calculateTotals();
+  });
+
+  // إضافة مصروف جديد
+  addExpenseBtn.addEventListener('click', () => {
+    const row = document.createElement('div');
+    row.className = 'expense-row';
+    row.innerHTML = `
+      <div>
+        <label class="exp-label">المبلغ</label>
+        <input type="number" class="input exp-val" placeholder="0" min="0">
+      </div>
+      <div class="exp-reason">
+        <label class="exp-label">السبب / البيان</label>
+        <input type="text" class="input exp-text" placeholder="مثال: بنزين، عهدة...">
+      </div>
+      <button type="button" class="icon-btn del-btn" style="height:48px" title="حذف">✕</button>
+    `;
+
+    row.querySelector('.exp-val').addEventListener('input', calculateTotals);
+    row.querySelector('.del-btn').addEventListener('click', () => {
+      row.remove();
+      calculateTotals();
+    });
+
+    expenseList.appendChild(row);
+    calculateTotals();
+  });
+
+  // --- 4. الحفظ في Firebase ---
+  document.getElementById('saveToFirebaseBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('saveToFirebaseBtn');
+    btn.textContent = "جاري الحفظ...";
+    btn.disabled = true;
+
+    try {
+      // تجميع بيانات التقرير
+      const reportData = {
+        date: document.getElementById('reportDate').value,
+        shiftStart: document.getElementById('shiftStart').value,
+        shiftEnd: document.getElementById('shiftEnd').value,
+        extraNotes: document.getElementById('extraNotes').value,
+        signerName: document.getElementById('signerName').value,
+        handoverTime: document.getElementById('handoverTime').value,
+        totals: {
+          orders: totals.ordersCount.textContent,
+          time: totals.time.textContent,
+          orderValue: totals.orderValue.textContent,
+          cash: totals.cash.textContent,
+          fees: totals.fees.textContent,
+          expenses: totals.expTotal.textContent,
+          net: totals.net.textContent
+        },
+        timestamp: new Date().toISOString()
       };
+
+      // حفظ التقرير في كولكشن "delivery_shifts"
+      await addDoc(collection(db, "delivery_shifts"), reportData);
       
-      try {
-        if (editingFirebaseId) {
-          const docRef = doc(db, "customers", editingFirebaseId);
-          await updateDoc(docRef, customerData);
-          
-          // Update local array
-          const index = customers.findIndex(c => c.firebaseId === editingFirebaseId);
-          if(index !== -1) customers[index] = { ...customerData, firebaseId: editingFirebaseId };
-          
-          if (cancelEditBtn) cancelEditBtn.click(); // Reset form & UI
-        } else {
-          const docRef = await addDoc(collection(db, "customers"), customerData);
-          
-          // Add to local array
-          customers.push({ ...customerData, firebaseId: docRef.id });
-          
-          form.reset();
-        }
-        
-        renderTable();
-        
-      } catch (e) {
-        console.error("Error saving document: ", e);
-        alert("حدث خطأ أثناء الحفظ!");
-      }
-    });
-  }
+      alert("✅ تم حفظ تقفيل الدليفري في قاعدة البيانات بنجاح!");
+    } catch (error) {
+      console.error("Error saving document: ", error);
+      alert("❌ حدث خطأ أثناء الحفظ. يرجى المحاولة مرة أخرى.");
+    } finally {
+      btn.textContent = "حفظ التقفيل في قاعدة البيانات";
+      btn.disabled = false;
+    }
+  });
 
-  // --- EXPORT TO EXCEL ---
+  // --- 5. أزرار التحكم (طباعة، مسح، واتساب) ---
+  
+  document.getElementById('printBtn').addEventListener('click', () => window.print());
+  
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    if(confirm('هل أنت متأكد من مسح جميع البيانات؟')) {
+      deliveryList.innerHTML = '';
+      expenseList.innerHTML = '';
+      calculateTotals();
+    }
+  });
 
-  if (exportBtn) {
-    exportBtn.addEventListener('click', function() {
-      if (customers.length === 0) {
-        alert("لا توجد بيانات عملاء لتصديرها حالياً!");
-        return;
-      }
+  document.getElementById('whatsappBtn').addEventListener('click', () => {
+    const phone = document.getElementById('pharmacyWa').value || '201000000000';
+    const text = `*تقفيل دليفري صيدليات شريف شعبان*%0a` +
+                 `التاريخ: ${document.getElementById('reportDate').value}%0a` +
+                 `إجمالي الطلبات: ${totals.ordersCount.textContent}%0a` +
+                 `الصافي للتسليم: ${totals.net.textContent} ج.م`;
+    window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
+  });
 
-      const headers = ["كود العميل (ID)", "اسم العميل", "رقم الهاتف 1", "رقم الهاتف 2", "العنوان / المنطقة", "نسبة الخصم", "ملاحظات إضافية"];
-      let csvContent = "\uFEFF"; 
-      
-      csvContent += headers.map(h => `"${h.replace(/"/g, '""')}"`).join(",") + "\r\n";
-
-      customers.forEach(cust => {
-        const row = [
-          cust.customerId || '',
-          cust.name || '',
-          cust.phone1 || '',
-          cust.phone2 || '',
-          cust.address || '',
-          (cust.discount || 0) + '%',
-          cust.notes || ''
-        ];
-        csvContent += row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",") + "\r\n";
-      });
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      
-      link.setAttribute("href", url);
-      link.setAttribute("download", `قاعدة_بيانات_العملاء_${new Date().toLocaleDateString('en-US')}.csv`);
-      link.style.visibility = 'hidden';
-      
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    });
-  }
+  // تهيئة الشاشة عند الفتح
+  calculateTotals();
 </script>
 </body>
 </html>
