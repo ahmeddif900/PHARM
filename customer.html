@@ -113,6 +113,121 @@
   </div>
 </div>
 
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>إدارة العملاء - صيدليات شريف شعبان | Customer Management</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root { --navy: #1a2a6b; --bg: #f3f4f7; --card: #ffffff; --line: #dfe3ed; --red: #c62828; --green: #1b7a3a; --line-strong: #c8cfdf; }
+  body { font-family: 'Cairo', sans-serif; background: var(--bg); margin: 0; padding: 20px; }
+  .container { max-width: 900px; margin: 0 auto; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+  .header { text-align: center; margin-bottom: 20px; color: var(--navy); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  .input { width: 100%; padding: 10px; border: 1.5px solid var(--line-strong); border-radius: 10px; font-family: 'Cairo'; margin-top: 5px; box-sizing: border-box; outline: none; transition: 0.2s; }
+  .input:focus { border-color: var(--navy); box-shadow: 0 0 0 3px rgba(26,42,107,.12); }
+  .btn { background: var(--navy); color: white; padding: 12px 20px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; width: 100%; font-family: 'Cairo'; font-size: 16px; transition: 0.2s; }
+  .btn:hover { background: #22368a; }
+  .btn-update { background: var(--green); }
+  .btn-update:hover { background: #168131; }
+  .table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+  .table th, .table td { padding: 12px; border-bottom: 1px solid var(--line); text-align: right; }
+  .table th { background: #f4f6fb; color: var(--navy); }
+  .action-btns { display: flex; gap: 8px; }
+  .btn-delete { background: #fff5f5; color: var(--red); border: 1px solid #efd0d0; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-family: 'Cairo'; font-weight: bold; }
+  .btn-delete:hover { background: #ffeaea; }
+  .btn-edit { background: #f4f6ff; color: var(--navy); border: 1px solid var(--line-strong); padding: 5px 10px; border-radius: 6px; cursor: pointer; font-family: 'Cairo'; font-weight: bold; }
+  .btn-edit:hover { background: #e4ebff; }
+  
+  /* New Search Styles */
+  .search-wrap { display: flex; flex-wrap: wrap; gap: 15px; background: #fcfdff; padding: 15px; border-radius: 12px; border: 1.5px dashed var(--line-strong); margin-bottom: 15px; align-items: flex-end; }
+  .search-col { flex: 1; min-width: 200px; }
+  .search-label { font-size: 13px; color: var(--navy); font-weight: bold; display: block; margin-bottom: 4px; }
+  .btn-export { background: var(--green); color: white; height: 46px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .btn-export:hover { background: #145c2c; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>قاعدة بيانات العملاء</h1>
+    <p>صيدليات شريف شعبان</p>
+  </div>
+
+  <div class="card">
+    <form id="customerForm">
+      <div class="grid">
+        <div>
+          <label>كود العميل (ID)</label>
+          <input type="text" id="custId" class="input" required>
+        </div>
+        <div>
+          <label>اسم العميل</label>
+          <input type="text" id="custName" class="input" required>
+        </div>
+        <div>
+          <label>رقم الهاتف 1</label>
+          <input type="tel" id="custPhone1" class="input" required>
+        </div>
+        <div>
+          <label>رقم الهاتف 2 (اختياري)</label>
+          <input type="tel" id="custPhone2" class="input">
+        </div>
+        <div>
+          <label>العنوان / المنطقة</label>
+          <input type="text" id="custAddress" class="input" required>
+        </div>
+        <div>
+          <label>نسبة الخصم (%)</label>
+          <input type="number" id="custDiscount" class="input" min="0" max="100" placeholder="مثال: 10">
+        </div>
+        <div style="grid-column: 1 / -1;">
+          <label>ملاحظات إضافية</label>
+          <input type="text" id="custNotes" class="input" placeholder="مثال: يفضل التوصيل بعد العصر">
+        </div>
+      </div>
+      <button type="submit" id="submitBtn" class="btn" style="margin-top: 20px;">حفظ العميل</button>
+      <button type="button" id="cancelEditBtn" class="btn" style="margin-top: 10px; background: #fff; color: var(--navy); border: 1.5px solid var(--navy); display: none;">إلغاء التعديل</button>
+    </form>
+  </div>
+
+  <div class="card" style="overflow-x: auto;">
+    <div class="search-wrap">
+      <div class="search-col">
+        <label class="search-label">🔍 بحث بالكود (ID):</label>
+        <input type="text" id="searchId" class="input" style="margin-top:0" placeholder="اكتب كود العميل...">
+      </div>
+      <div class="search-col">
+        <label class="search-label">🔍 بحث برقم الهاتف:</label>
+        <input type="tel" id="searchPhone" class="input" style="margin-top:0" placeholder="اكتب رقم الهاتف...">
+      </div>
+      <div class="search-col" style="flex: 0 1 auto; min-width: 160px;">
+        <button type="button" id="exportExcelBtn" class="btn btn-export">📊 تصدير إلى Excel</button>
+      </div>
+    </div>
+
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>الاسم</th>
+          <th>الهواتف</th>
+          <th>المنطقة</th>
+          <th>الخصم</th>
+          <th>ملاحظات</th>
+          <th>إجراءات</th>
+        </tr>
+      </thead>
+      <tbody id="customerTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
 <script type="module">
   // 1. Import Firebase tools
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
@@ -135,9 +250,14 @@
 
   // Array to hold customer data locally
   let customers = []; 
-  
-  // Track if we are editing an existing customer
   let editingFirebaseId = null;
+
+  // HTML Element References
+  const form = document.getElementById('customerForm');
+  const submitBtn = document.getElementById('submitBtn');
+  const cancelEditBtn = document.getElementById('cancelEditBtn');
+  const searchIdInput = document.getElementById('searchId');
+  const searchPhoneInput = document.getElementById('searchPhone');
 
   // --- DATABASE FUNCTIONS ---
 
@@ -157,32 +277,52 @@
     }
   }
 
-  function renderTable(dataToRender = customers) {
+  // --- RENDER & SEARCH FUNCTION ---
+
+  function renderTable() {
     const tbody = document.getElementById('customerTableBody');
+    const idQuery = searchIdInput.value.trim().toLowerCase();
+    const phoneQuery = searchPhoneInput.value.trim().toLowerCase();
+    
     tbody.innerHTML = ''; 
     
-    dataToRender.forEach((cust) => {
-      const row = document.createElement('tr');
-      row.innerHTML = `
-        <td>${cust.customerId || ''}</td>
-        <td>${cust.name || ''}</td>
-        <td>${cust.phone1 || ''} ${cust.phone2 ? '/ ' + cust.phone2 : ''}</td>
-        <td>${cust.address || ''}</td>
-        <td>${cust.discount || 0}%</td>
-        <td>${cust.notes || ''}</td>
-        <td class="action-btns">
-          <button class="btn-edit" onclick="window.editCustomer('${cust.firebaseId}')">تعديل</button>
-          <button class="btn-delete" onclick="window.deleteCustomer('${cust.firebaseId}')">حذف</button>
-        </td>
-      `;
-      tbody.appendChild(row);
+    customers.forEach((cust) => {
+      // Check ID match
+      const matchId = idQuery === '' || String(cust.customerId || '').toLowerCase().includes(idQuery);
+      
+      // Check Phone match (checks both phone1 and phone2)
+      const matchPhone = phoneQuery === '' || 
+                        String(cust.phone1 || '').toLowerCase().includes(phoneQuery) || 
+                        String(cust.phone2 || '').toLowerCase().includes(phoneQuery);
+
+      // Render only if BOTH active search bars match the customer
+      if (matchId && matchPhone) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${cust.customerId || ''}</td>
+          <td>${cust.name || ''}</td>
+          <td dir="ltr">${cust.phone1 || ''} <br> <small>${cust.phone2 || ''}</small></td>
+          <td>${cust.address || ''}</td>
+          <td>${cust.discount ? cust.discount + '%' : '-'}</td>
+          <td>${cust.notes || ''}</td>
+          <td class="action-btns">
+            <button class="btn-edit" onclick="window.editCustomer('${cust.firebaseId}')" title="تعديل">✎</button>
+            <button class="btn-delete" onclick="window.deleteCustomer('${cust.firebaseId}')" title="حذف">✕</button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      }
     });
   }
+
+  // Listen for typing in both search bars
+  searchIdInput.addEventListener('input', renderTable);
+  searchPhoneInput.addEventListener('input', renderTable);
 
   // Load data as soon as the page opens
   document.addEventListener('DOMContentLoaded', loadCustomers);
 
-  // --- EDIT AND DELETE FUNCTIONS (Attached to window for inline onclick access) ---
+  // --- EDIT AND DELETE FUNCTIONS ---
 
   window.deleteCustomer = async function(firebaseId) {
     if(confirm("هل أنت متأكد من حذف هذا العميل؟")) {
@@ -211,36 +351,31 @@
       editingFirebaseId = firebaseId; // Set edit mode
       
       // Update UI for editing
-      const submitBtn = document.getElementById('submitBtn');
       submitBtn.textContent = "تحديث بيانات العميل";
       submitBtn.classList.add('btn-update');
-      document.getElementById('cancelEditBtn').style.display = "block";
+      cancelEditBtn.style.display = "block";
       
       // Scroll to top to see the form
-      window.scrollTo(0, 0);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
   // Cancel edit mode
-  const cancelBtn = document.getElementById('cancelEditBtn');
-  if(cancelBtn) {
-    cancelBtn.addEventListener('click', function() {
+  if(cancelEditBtn) {
+    cancelEditBtn.addEventListener('click', function() {
       resetFormState();
     });
   }
 
   function resetFormState() {
-    document.getElementById('customerForm').reset();
+    form.reset();
     editingFirebaseId = null;
-    const submitBtn = document.getElementById('submitBtn');
     submitBtn.textContent = "حفظ العميل";
     submitBtn.classList.remove('btn-update');
-    document.getElementById('cancelEditBtn').style.display = "none";
+    cancelEditBtn.style.display = "none";
   }
 
   // --- FORM SUBMISSION ---
-  
-  const form = document.getElementById('customerForm'); 
   
   if (form) {
     form.addEventListener('submit', async function(e) {
@@ -249,7 +384,7 @@
       const inputId = document.getElementById('custId').value.trim();
       const inputPhone = document.getElementById('custPhone1').value.trim();
 
-      // 1. Check for Unique ID and Phone Number
+      // Check for Unique ID and Phone Number
       const isDuplicateId = customers.some(c => c.customerId === inputId && c.firebaseId !== editingFirebaseId);
       const isDuplicatePhone = customers.some(c => c.phone1 === inputPhone && c.firebaseId !== editingFirebaseId);
 
@@ -305,16 +440,14 @@
         return;
       }
 
-      // 1. تحديد عناوين الأعمدة في ملف الإكسيل
+      // تحديد عناوين الأعمدة في ملف الإكسيل
       const headers = ["كود العميل (ID)", "اسم العميل", "رقم الهاتف 1", "رقم الهاتف 2", "العنوان / المنطقة", "نسبة الخصم", "ملاحظات إضافية"];
       
-      // 2. إضافة رمز الـ BOM (\uFEFF) في بداية الملف لإجبار إكسيل على قراءة اللغة العربية بشكل صحيح
+      // إضافة رمز الـ BOM (\uFEFF)
       let csvContent = "\uFEFF"; 
       
-      // إدخال السطر الأول (العناوين)
       csvContent += headers.map(h => `"${h.replace(/"/g, '""')}"`).join(",") + "\r\n";
 
-      // 3. التكرار لاستخراج بيانات كل عميل وتحويلها لأسطر داخل الملف
       customers.forEach(cust => {
         const row = [
           cust.customerId || '',
@@ -325,11 +458,9 @@
           (cust.discount || 0) + '%',
           cust.notes || ''
         ];
-        // تنظيف النصوص من أي علامات تنصيص قد تفسد هيكلة الملف وعزل الخلايا بالفواصل
         csvContent += row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",") + "\r\n";
       });
 
-      // 4. إنشاء رابط وهمي لتحميل الملف بشكل فوري وجلبه كملف CSV متوافق مع Excel
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -343,29 +474,8 @@
       document.body.removeChild(link);
     });
   }
-
-  // --- SUB-SEARCH LOGIC (ID AND PHONE NUMBERS ONLY) ---
-  const searchInput = document.getElementById('searchInput');
-
-  if (searchInput) {
-    searchInput.addEventListener('input', function(e) {
-      const searchTerms = e.target.value.trim().toLowerCase().split(/\s+/);
-      
-      const filteredCustomers = customers.filter(cust => {
-        // Restrict the searchable data to only ID and Phone numbers
-        const rowData = `
-          ${cust.customerId || ''} 
-          ${cust.phone1 || ''} 
-          ${cust.phone2 || ''} 
-        `.toLowerCase();
-        
-        // Ensure every search term exists within the restricted fields
-        return searchTerms.every(term => rowData.includes(term));
-      });
-
-      renderTable(filteredCustomers);
-    });
-  }
 </script>
+</body>
+</html>
 </body>
 </html>
