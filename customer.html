@@ -114,7 +114,7 @@
 </div>
 
 <script type="module">
-  // 1. Import Firebase tools (Added deleteDoc, doc, updateDoc)
+  // 1. Import Firebase tools
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
   import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
@@ -157,11 +157,11 @@
     }
   }
 
-  function renderTable() {
+  function renderTable(dataToRender = customers) {
     const tbody = document.getElementById('customerTableBody');
     tbody.innerHTML = ''; 
     
-    customers.forEach((cust) => {
+    dataToRender.forEach((cust) => {
       const row = document.createElement('tr');
       row.innerHTML = `
         <td>${cust.customerId || ''}</td>
@@ -222,9 +222,12 @@
   };
 
   // Cancel edit mode
-  document.getElementById('cancelEditBtn').addEventListener('click', function() {
-    resetFormState();
-  });
+  const cancelBtn = document.getElementById('cancelEditBtn');
+  if(cancelBtn) {
+    cancelBtn.addEventListener('click', function() {
+      resetFormState();
+    });
+  }
 
   function resetFormState() {
     document.getElementById('customerForm').reset();
@@ -239,102 +242,130 @@
   
   const form = document.getElementById('customerForm'); 
   
-  form.addEventListener('submit', async function(e) {
-    e.preventDefault(); 
-    
-    const inputId = document.getElementById('custId').value.trim();
-    const inputPhone = document.getElementById('custPhone1').value.trim();
+  if (form) {
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault(); 
+      
+      const inputId = document.getElementById('custId').value.trim();
+      const inputPhone = document.getElementById('custPhone1').value.trim();
 
-    // 1. Check for Unique ID and Phone Number
-    const isDuplicateId = customers.some(c => c.customerId === inputId && c.firebaseId !== editingFirebaseId);
-    const isDuplicatePhone = customers.some(c => c.phone1 === inputPhone && c.firebaseId !== editingFirebaseId);
+      // 1. Check for Unique ID and Phone Number
+      const isDuplicateId = customers.some(c => c.customerId === inputId && c.firebaseId !== editingFirebaseId);
+      const isDuplicatePhone = customers.some(c => c.phone1 === inputPhone && c.firebaseId !== editingFirebaseId);
 
-    if (isDuplicateId) {
-      alert("خطأ: كود العميل (ID) موجود مسبقاً لعميل آخر!");
-      return;
-    }
-    if (isDuplicatePhone) {
-      alert("خطأ: رقم الهاتف 1 مسجل مسبقاً لعميل آخر!");
-      return;
-    }
-    
-    // Gather data
-    const customerData = {
-      customerId: inputId,
-      name: document.getElementById('custName').value.trim(),
-      phone1: inputPhone,
-      phone2: document.getElementById('custPhone2').value.trim(),
-      address: document.getElementById('custAddress').value.trim(),
-      discount: document.getElementById('custDiscount').value,
-      notes: document.getElementById('custNotes').value.trim(),
-      timestamp: new Date().toISOString() 
-    };
-    
-    try {
-      if (editingFirebaseId) {
-        // Update existing document
-        const docRef = doc(db, "customers", editingFirebaseId);
-        await updateDoc(docRef, customerData);
-        alert("تم تحديث البيانات بنجاح!");
-      } else {
-        // Add new document
-        await addDoc(collection(db, "customers"), customerData);
-        alert("تم حفظ العميل بنجاح!");
+      if (isDuplicateId) {
+        alert("خطأ: كود العميل (ID) موجود مسبقاً لعميل آخر!");
+        return;
+      }
+      if (isDuplicatePhone) {
+        alert("خطأ: رقم الهاتف 1 مسجل مسبقاً لعميل آخر!");
+        return;
       }
       
-      resetFormState();
-      loadCustomers();
+      // Gather data
+      const customerData = {
+        customerId: inputId,
+        name: document.getElementById('custName').value.trim(),
+        phone1: inputPhone,
+        phone2: document.getElementById('custPhone2').value.trim(),
+        address: document.getElementById('custAddress').value.trim(),
+        discount: document.getElementById('custDiscount').value,
+        notes: document.getElementById('custNotes').value.trim(),
+        timestamp: new Date().toISOString() 
+      };
       
-    } catch (e) {
-      console.error("Error saving document: ", e);
-      alert("حدث خطأ أثناء الحفظ!");
-    }
-  });
+      try {
+        if (editingFirebaseId) {
+          // Update existing document
+          const docRef = doc(db, "customers", editingFirebaseId);
+          await updateDoc(docRef, customerData);
+          alert("تم تحديث البيانات بنجاح!");
+        } else {
+          // Add new document
+          await addDoc(collection(db, "customers"), customerData);
+          alert("تم حفظ العميل بنجاح!");
+        }
+        
+        resetFormState();
+        loadCustomers();
+        
+      } catch (e) {
+        console.error("Error saving document: ", e);
+        alert("حدث خطأ أثناء الحفظ!");
+      }
+    });
+  }
 
   // --- دالة التصدير إلى EXCEL ---
-  document.getElementById('exportExcelBtn').addEventListener('click', function() {
-    if (customers.length === 0) {
-      alert("لا توجد بيانات عملاء لتصديرها حالياً!");
-      return;
-    }
+  const exportBtn = document.getElementById('exportExcelBtn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', function() {
+      if (customers.length === 0) {
+        alert("لا توجد بيانات عملاء لتصديرها حالياً!");
+        return;
+      }
 
-    // 1. تحديد عناوين الأعمدة في ملف الإكسيل
-    const headers = ["كود العميل (ID)", "اسم العميل", "رقم الهاتف 1", "رقم الهاتف 2", "العنوان / المنطقة", "نسبة الخصم", "ملاحظات إضافية"];
-    
-    // 2. إضافة رمز الـ BOM (\uFEFF) في بداية الملف لإجبار إكسيل على قراءة اللغة العربية بشكل صحيح
-    let csvContent = "\uFEFF"; 
-    
-    // إدخال السطر الأول (العناوين)
-    csvContent += headers.map(h => `"${h.replace(/"/g, '""')}"`).join(",") + "\r\n";
+      // 1. تحديد عناوين الأعمدة في ملف الإكسيل
+      const headers = ["كود العميل (ID)", "اسم العميل", "رقم الهاتف 1", "رقم الهاتف 2", "العنوان / المنطقة", "نسبة الخصم", "ملاحظات إضافية"];
+      
+      // 2. إضافة رمز الـ BOM (\uFEFF) في بداية الملف لإجبار إكسيل على قراءة اللغة العربية بشكل صحيح
+      let csvContent = "\uFEFF"; 
+      
+      // إدخال السطر الأول (العناوين)
+      csvContent += headers.map(h => `"${h.replace(/"/g, '""')}"`).join(",") + "\r\n";
 
-    // 3. التكرار لاستخراج بيانات كل عميل وتحويلها لأسطر داخل الملف
-    customers.forEach(cust => {
-      const row = [
-        cust.customerId || '',
-        cust.name || '',
-        cust.phone1 || '',
-        cust.phone2 || '',
-        cust.address || '',
-        (cust.discount || 0) + '%',
-        cust.notes || ''
-      ];
-      // تنظيف النصوص من أي علامات تنصيص قد تفسد هيكلة الملف وعزل الخلايا بالفواصل
-      csvContent += row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",") + "\r\n";
+      // 3. التكرار لاستخراج بيانات كل عميل وتحويلها لأسطر داخل الملف
+      customers.forEach(cust => {
+        const row = [
+          cust.customerId || '',
+          cust.name || '',
+          cust.phone1 || '',
+          cust.phone2 || '',
+          cust.address || '',
+          (cust.discount || 0) + '%',
+          cust.notes || ''
+        ];
+        // تنظيف النصوص من أي علامات تنصيص قد تفسد هيكلة الملف وعزل الخلايا بالفواصل
+        csvContent += row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",") + "\r\n";
+      });
+
+      // 4. إنشاء رابط وهمي لتحميل الملف بشكل فوري وجلبه كملف CSV متوافق مع Excel
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      
+      link.setAttribute("href", url);
+      link.setAttribute("download", `قاعدة_بيانات_العملاء_${new Date().toLocaleDateString('en-US')}.csv`);
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     });
+  }
 
-    // 4. إنشاء رابط وهمي لتحميل الملف بشكل فوري وجلبه كملف CSV متوافق مع Excel
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    
-    link.setAttribute("href", url);
-    link.setAttribute("download", `قاعدة_بيانات_العملاء_${new Date().toLocaleDateString('en-US')}.csv`);
-    link.style.visibility = 'hidden';
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  });
+  // --- SUB-SEARCH LOGIC (ID AND PHONE NUMBERS ONLY) ---
+  const searchInput = document.getElementById('searchInput');
+
+  if (searchInput) {
+    searchInput.addEventListener('input', function(e) {
+      const searchTerms = e.target.value.trim().toLowerCase().split(/\s+/);
+      
+      const filteredCustomers = customers.filter(cust => {
+        // Restrict the searchable data to only ID and Phone numbers
+        const rowData = `
+          ${cust.customerId || ''} 
+          ${cust.phone1 || ''} 
+          ${cust.phone2 || ''} 
+        `.toLowerCase();
+        
+        // Ensure every search term exists within the restricted fields
+        return searchTerms.every(term => rowData.includes(term));
+      });
+
+      renderTable(filteredCustomers);
+    });
+  }
 </script>
 </body>
 </html>
