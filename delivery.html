@@ -590,239 +590,465 @@ select{
   </div>
 <button id="saveToFirebaseBtn" class="btn-time start" type="button">حفظ التقفيل في قاعدة البيانات</button>
 <script type="module">
-  // --- 1. إعدادات Firebase ---
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-  import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+/* ---------- Firebase Setup ---------- */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyCeVHkiZmMsweui1ZNAJKsTEJlNQYg3iuY",
-    authDomain: "pharm-7b71a.firebaseapp.com",
-    projectId: "pharm-7b71a",
-    storageBucket: "pharm-7b71a.firebasestorage.app",
-    messagingSenderId: "422760369118",
-    appId: "1:422760369118:web:79046658a5c6a84dea2b4f",
-    measurementId: "G-Y7GHKEGM1Z"
-  };
-  
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
+const firebaseConfig = {
+  apiKey: "AIzaSyCeVHkiZmMsweui1ZNAJKsTEJlNQYg3iuY",
+  authDomain: "pharm-7b71a.firebaseapp.com",
+  projectId: "pharm-7b71a",
+  storageBucket: "pharm-7b71a.firebasestorage.app",
+  messagingSenderId: "422760369118",
+  appId: "1:422760369118:web:79046658a5c6a84dea2b4f",
+  measurementId: "G-Y7GHKEGM1Z"
+};
 
-  // --- 2. تعريف عناصر الصفحة (DOM) ---
-  const deliveryList = document.getElementById('deliveryList');
-  const emptyDeliveries = document.getElementById('emptyDeliveries');
-  const addDeliveryBtn = document.getElementById('addDeliveryBtn');
-  
-  const expenseList = document.getElementById('expenseList');
-  const addExpenseBtn = document.getElementById('addExpenseBtn');
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
-  // عناصر الإجماليات
-  const totals = {
-    ordersCount: document.getElementById('t_orders'),
-    time: document.getElementById('t_time'),
-    orderValue: document.getElementById('t_orderValue'),
-    cash: document.getElementById('t_cash'),
-    fees: document.getElementById('t_fees'),
-    net: document.getElementById('t_net'),
-    expTotal: document.getElementById('exp_total'),
-    expNetAfter: document.getElementById('exp_net_after')
-  };
-
-  // إعداد تاريخ اليوم تلقائياً
-  document.getElementById('reportDate').valueAsDate = new Date();
-
-  // --- 3. الدوال البرمجية (Functions) ---
-
-  // دالة الحساب التلقائي
-  function calculateTotals() {
-    let sumOrdersValue = 0;
-    let sumCash = 0;
-    let sumFees = 0;
-    let sumTime = 0;
-    let ordersCount = 0;
-
-    // حساب الطلبات
-    const rows = deliveryList.querySelectorAll('.delivery-row');
-    ordersCount = rows.length;
-    
-    rows.forEach(row => {
-      const orderVal = parseFloat(row.querySelector('.order-val').value) || 0;
-      const cashVal = parseFloat(row.querySelector('.cash-col').value) || 0;
-      const feeVal = parseFloat(row.querySelector('.del-fee').value) || 0;
-      
-      sumOrdersValue += orderVal;
-      sumCash += cashVal;
-      sumFees += feeVal;
-
-      // حساب الوقت
-      const start = row.querySelector('.start-time').value;
-      const end = row.querySelector('.end-time').value;
-      const durationCell = row.querySelector('.duration-cell');
-      
-      if (start && end) {
-        const startTime = new Date(`1970-01-01T${start}`);
-        const endTime = new Date(`1970-01-01T${end}`);
-        let diffMins = Math.round((endTime - startTime) / 60000);
-        if(diffMins < 0) diffMins += 24 * 60; // لو الوقت عدى منتصف الليل
-        sumTime += diffMins;
-        durationCell.textContent = diffMins + ' د';
-        durationCell.classList.remove('empty');
-      } else {
-        durationCell.textContent = '-';
-        durationCell.classList.add('empty');
-      }
+/* ---------- Fetch Customers Data for Auto-fill ---------- */
+let firebaseCustomers = [];
+async function loadCustomersFromFirebase() {
+  try {
+    const querySnapshot = await getDocs(collection(db, "customers"));
+    firebaseCustomers = [];
+    querySnapshot.forEach((doc) => {
+      firebaseCustomers.push(doc.data());
     });
-
-    // حساب المصروفات
-    let sumExpenses = 0;
-    const expRows = expenseList.querySelectorAll('.expense-row');
-    expRows.forEach(row => {
-      sumExpenses += parseFloat(row.querySelector('.exp-val').value) || 0;
-    });
-
-    // الصافي = الكاش + الرسوم - المصروفات
-    const netTotal = (sumCash + sumFees) - sumExpenses;
-
-    // تحديث الشاشة
-    totals.ordersCount.textContent = ordersCount;
-    totals.time.textContent = sumTime;
-    totals.orderValue.textContent = sumOrdersValue;
-    totals.cash.textContent = sumCash;
-    totals.fees.textContent = sumFees;
-    totals.expTotal.textContent = sumExpenses;
-    totals.net.textContent = netTotal;
-    totals.expNetAfter.textContent = netTotal;
-
-    // إخفاء/إظهار رسالة "لا توجد طلبات"
-    emptyDeliveries.style.display = ordersCount === 0 ? 'block' : 'none';
+    console.log("✅ تم تحميل بيانات العملاء بنجاح للبحث التلقائي:", firebaseCustomers.length);
+  } catch (error) {
+    console.error("❌ خطأ في تحميل بيانات العملاء:", error);
   }
+}
 
-  // إضافة طلب جديد
-  addDeliveryBtn.addEventListener('click', () => {
-    const row = document.createElement('div');
-    row.className = 'delivery-row';
-    row.innerHTML = `
-      <input type="text" class="input order-id" placeholder="رقم الأوردر">
-      <input type="text" class="input rep-name" placeholder="المندوب">
-      <input type="tel" class="input phone" placeholder="الموبايل">
-      <input type="text" class="input zone" placeholder="المنطقة">
-      <input type="time" class="input start-time">
-      <input type="time" class="input end-time">
-      <div class="duration-cell empty">-</div>
-      <input type="number" class="input order-val" placeholder="قيمة" min="0">
-      <input type="number" class="input cash-col" placeholder="كاش" min="0">
-      <input type="number" class="input del-fee" placeholder="رسوم" min="0">
-      <select class="input pay-method">
-        <option value="cash">كاش</option>
-        <option value="visa">فيزا</option>
-      </select>
-      <input type="text" class="input notes" placeholder="ملاحظات">
-      <button type="button" class="icon-btn del-btn" title="حذف">✕</button>
-    `;
+/* ---------- Utilities ---------- */
+const $ = (s, r=document)=>r.querySelector(s);
+const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
+const egp = n => (isFinite(n) ? Number(n).toLocaleString('en-US', {maximumFractionDigits:2}) : '0');
+const toNum = v => { const n = parseFloat(String(v).replace(/,/g,'')); return isFinite(n) ? n : 0; };
 
-    // تفعيل الحساب التلقائي عند تغيير الأرقام
-    row.querySelectorAll('input').forEach(input => {
-      input.addEventListener('input', calculateTotals);
-    });
+function nowHHMM(){
+  const d = new Date();
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
 
-    // زر الحذف
-    row.querySelector('.del-btn').addEventListener('click', () => {
-      row.remove();
-      calculateTotals();
-    });
+function parseMinutes(hhmm){
+  if(!hhmm || !hhmm.includes(':')) return null;
+  const [h, m] = hhmm.split(':').map(Number);
+  if(isNaN(h) || isNaN(m)) return null;
+  return h * 60 + m;
+}
 
-    deliveryList.appendChild(row);
-    calculateTotals();
+function calcDurationMinutes(start, end){
+  const s = parseMinutes(start);
+  const e = parseMinutes(end);
+  if(s === null || e === null) return null;
+  let diff = e - s;
+  if(diff < 0) diff += 1440; 
+  return diff;
+}
+
+/* ---------- State ---------- */
+let deliveries = [];
+let expenses = [];
+let dId = 1, eId = 1;
+
+const DRIVERS = ['يوسف', 'أحمد خالد',"يس رستم","مندوب "];
+
+/* ---------- Deliveries UI ---------- */
+const deliveryList = $('#deliveryList');
+const emptyDeliveries = $('#emptyDeliveries');
+const searchDeliveryPhone = $('#searchDeliveryPhone');
+
+function driverOptions(selected){
+  let opts = '<option value="">اختر المندوب...</option>';
+  DRIVERS.forEach(name => {
+    opts += `<option value="${name}" ${selected===name?'selected':''}>${name}</option>`;  
+  });
+  return opts;
+}
+
+function paymentOptions(selected){
+  const opts = [
+    ['cash','Cash / كاش'],
+    ['card','Card / فيزا'],
+    ['instapay','Instapay / انستاباي'],
+    ['fawry','Fawry / فوري'],
+    ['inaya','Inaya / عناية'],
+    ['wallet','Wallet / محفظة'],
+  ];
+  return opts.map(([v,l]) => `<option value="${v}" ${selected===v?'selected':''}>${l}</option>`).join('');
+}
+
+function deliveryRowTemplate(d){
+  const dur = calcDurationMinutes(d.startTime, d.endTime);
+  const durText = dur === null ? '—' : `${dur} د`;
+  const startHtml = d.startTime
+    ? `<div class="time-input-wrap"><input class="input" type="time" data-field="startTime" value="${escapeHtml(d.startTime)}"><div class="time-ok">✓ بدء</div></div>`
+    : `<button class="btn-time start" type="button" data-set-start="${d.id}">بدء</button>`;
+  const endDisabled = !d.startTime;
+  const endHtml = d.endTime
+    ? `<div class="time-input-wrap"><input class="input" type="time" data-field="endTime" value="${escapeHtml(d.endTime)}"><div class="time-ok end-ok">✓ انتهاء</div></div>`
+    : `<button class="btn-time end" type="button" data-set-end="${d.id}" ${endDisabled ? 'disabled' : ''}>انتهاء</button>`;
+  
+  return `<div class="delivery-row" data-id="${d.id}">
+    <div class="dcell"><input class="input" type="text" data-field="orderNo" placeholder="1024" value="${escapeHtml(d.orderNo||'')}" autocomplete="off"></div>
+    <div class="dcell"><select data-field="driverName" style="padding-left:10px">${driverOptions(d.driverName)}</select></div>
+    <div class="dcell"><input class="input" type="tel" inputmode="tel" data-field="customerMobile" placeholder="01xxxxxxxxx" value="${escapeHtml(d.customerMobile||'')}" dir="ltr"></div>
+    <div class="dcell"><input class="input" type="text" data-field="area" placeholder="سموحة" value="${escapeHtml(d.area||'')}"></div>
+    <div class="dcell">${startHtml}</div>
+    <div class="dcell">${endHtml}</div>
+    <div class="dcell"><div class="duration-cell ${dur===null?'empty':''}">${durText}</div></div>
+    <div class="dcell"><input class="input" type="number" inputmode="decimal" step="0.01" min="0" data-field="orderTotal" placeholder="0" value="${escapeHtml(d.orderTotal||'')}"></div>
+    <div class="dcell"><input class="input" type="number" inputmode="decimal" step="0.01" min="0" data-field="cash" placeholder="0" value="${escapeHtml(d.cash||'')}"></div>
+    <div class="dcell"><input class="input" type="number" inputmode="decimal" step="0.01" min="0" data-field="fee" placeholder="0" value="${escapeHtml(d.fee||'')}"></div>
+    <div class="dcell"><select data-field="pay">${paymentOptions(d.pay)}</select></div>
+    <div class="dcell"><input class="input" type="text" data-field="notes" placeholder="—" value="${escapeHtml(d.notes||'')}"></div>
+    <div class="dcell" style="display:flex;justify-content:center"><button class="icon-btn" type="button" data-remove-delivery="${d.id}" title="حذف">✕</button></div>
+  </div>`;
+}
+
+function renderDeliveries(){
+  const tableWrap = document.querySelector('.delivery-table-wrap');
+  const phoneQuery = searchDeliveryPhone.value.trim().toLowerCase();
+
+  const filteredDeliveries = deliveries.filter(d => {
+    return phoneQuery === '' || (d.customerMobile || '').toLowerCase().includes(phoneQuery);
   });
 
-  // إضافة مصروف جديد
-  addExpenseBtn.addEventListener('click', () => {
-    const row = document.createElement('div');
-    row.className = 'expense-row';
-    row.innerHTML = `
-      <div>
-        <label class="exp-label">المبلغ</label>
-        <input type="number" class="input exp-val" placeholder="0" min="0">
-      </div>
-      <div class="exp-reason">
-        <label class="exp-label">السبب / البيان</label>
-        <input type="text" class="input exp-text" placeholder="مثال: بنزين، عهدة...">
-      </div>
-      <button type="button" class="icon-btn del-btn" style="height:48px" title="حذف">✕</button>
-    `;
+  if(deliveries.length === 0){
+    deliveryList.innerHTML = '';
+    emptyDeliveries.style.display = '';
+    emptyDeliveries.textContent = 'لا توجد طلبات بعد — اضغط "إضافة طلب" بالأسفل';
+    if(tableWrap) tableWrap.style.display = 'none';
+  } else if (filteredDeliveries.length === 0) {
+    deliveryList.innerHTML = '';
+    emptyDeliveries.style.display = '';
+    emptyDeliveries.textContent = 'لا توجد نتائج تطابق بحثك';
+    if(tableWrap) tableWrap.style.display = 'none';
+  } else {
+    emptyDeliveries.style.display = 'none';
+    if(tableWrap) tableWrap.style.display = '';
+    deliveryList.innerHTML = filteredDeliveries.map(deliveryRowTemplate).join('');
+  }
+  
+  calcTotals();
+}
 
-    row.querySelector('.exp-val').addEventListener('input', calculateTotals);
-    row.querySelector('.del-btn').addEventListener('click', () => {
-      row.remove();
-      calculateTotals();
-    });
+searchDeliveryPhone.addEventListener('input', renderDeliveries);
 
-    expenseList.appendChild(row);
-    calculateTotals();
+function addDelivery(data={}){
+  deliveries.push({ id: dId++, orderNo:'', driverName:'', customerMobile:'', area:'', startTime:'', endTime:'', orderTotal:'', cash:'', fee:'', pay:'cash', notes:'', ...data });
+  if(searchDeliveryPhone.value) searchDeliveryPhone.value = '';
+  renderDeliveries();
+}
+
+function removeDelivery(id){
+  deliveries = deliveries.filter(d => d.id !== id);
+  renderDeliveries();
+}
+
+/* ---------- Expenses ---------- */
+const expenseList = $('#expenseList');
+
+function expenseRowTemplate(e){
+  return `<div class="expense-row" data-eid="${e.id}">
+    <div>
+      <div class="exp-label">المبلغ</div>
+      <input class="input" type="number" inputmode="decimal" step="0.01" min="0" data-efield="amount" placeholder="0" value="${escapeHtml(e.amount||'')}">
+    </div>
+    <div class="exp-reason">
+      <div class="exp-label">السبب واسم المندوب</div>
+      <input class="input" type="text" data-efield="reason" placeholder="موصلات ..." value="${escapeHtml(e.reason||'')}">
+    </div>
+    <div style="display:flex;align-items:end;height:100%">
+      <button class="icon-btn" type="button" data-remove-expense="${e.id}" style="width:44px;justify-content:center">✕</button>
+    </div>
+  </div>`;
+}
+
+function renderExpenses(){
+  expenseList.innerHTML = expenses.map(expenseRowTemplate).join('');
+  calcTotals();
+}
+
+function addExpense(data={}){
+  expenses.push({id:eId++, amount:'', reason:'', ...data});
+  renderExpenses();
+}
+
+function removeExpense(id){
+  expenses = expenses.filter(e => e.id !== id);
+  renderExpenses();
+}
+
+/* ---------- Totals ---------- */
+function calcTotals(){
+  const rows = deliveries; 
+  const count = rows.length;
+  let orderValue = 0, cash = 0, fees = 0, totalMinutes = 0;
+  
+  rows.forEach(r=>{
+    orderValue += toNum(r.orderTotal);
+    cash += toNum(r.cash);
+    fees += toNum(r.fee);
+    const dur = calcDurationMinutes(r.startTime, r.endTime);
+    if(dur !== null) totalMinutes += dur;
   });
+  const net = cash - fees;
 
-  // --- 4. الحفظ في Firebase ---
-  document.getElementById('saveToFirebaseBtn').addEventListener('click', async () => {
-    const btn = document.getElementById('saveToFirebaseBtn');
-    btn.textContent = "جاري الحفظ...";
-    btn.disabled = true;
+  let expTotal = 0;
+  expenses.forEach(x => { expTotal += toNum(x.amount); });
+  const netAfter = net - expTotal;
+
+  $('#t_orders').textContent = count;
+  $('#t_time').textContent = totalMinutes;
+  $('#t_orderValue').textContent = egp(orderValue);
+  $('#t_cash').textContent = egp(cash);
+  $('#t_fees').textContent = egp(fees);
+  $('#t_net').textContent = egp(net);
+
+  $('#exp_total').textContent = egp(expTotal);
+  $('#exp_net_after').textContent = egp(netAfter);
+
+  $('#sumBarCount').textContent = count;
+  $('#sumBarTime').textContent = totalMinutes;
+  $('#sumBarOrders').textContent = egp(orderValue);
+  $('#sumBarCash').textContent = egp(cash);
+  $('#sumBarFees').textContent = egp(fees);
+
+  $('#ms_orders').textContent = count;
+  $('#ms_cash').textContent = egp(cash) + ' ج.م';
+  $('#ms_net').textContent = egp(netAfter) + ' ج.م';
+
+  const netBox = $('#netBox');
+  if(net >= 0){ netBox.classList.add('cash-positive'); } else { netBox.classList.remove('cash-positive'); }
+
+  return {count, totalMinutes, orderValue, cash, fees, net, expTotal, netAfter};
+}
+
+/* ---------- Events ---------- */
+deliveryList.addEventListener('input', (e)=>{
+  const row = e.target.closest('.delivery-row');
+  if(!row) return;
+  const id = Number(row.dataset.id);
+  const field = e.target.getAttribute('data-field');
+  if(!field) return;
+  const obj = deliveries.find(d=>d.id===id);
+  
+  if(obj){
+    obj[field] = e.target.value;
+    
+    // --- FIREBASE CUSTOMER AUTO-FILL LOGIC ---
+    if (field === 'customerMobile') {
+      const typedPhone = e.target.value.trim();
+      // Search inside the firebaseCustomers array loaded on initialization
+      const matchedCustomer = firebaseCustomers.find(c => c.phone1 === typedPhone || c.phone2 === typedPhone);
+      
+      if (matchedCustomer) {
+        obj.area = matchedCustomer.address || '';
+        let autoNotes = matchedCustomer.name || '';
+        if (matchedCustomer.discount) autoNotes += ` (خصم ${matchedCustomer.discount}%)`;
+        if (matchedCustomer.notes) autoNotes += ` - ${matchedCustomer.notes}`;
+        obj.notes = autoNotes;
+
+        const areaInput = row.querySelector('[data-field="area"]');
+        const notesInput = row.querySelector('[data-field="notes"]');
+        if (areaInput) areaInput.value = obj.area;
+        if (notesInput) notesInput.value = obj.notes;
+      }
+    }
+    // --------------------------------
+    
+    if(field === 'startTime' || field === 'endTime'){
+      calcTotals();
+      const dur = calcDurationMinutes(obj.startTime, obj.endTime);
+      const durCell = row.querySelector('.duration-cell');
+      if(durCell){
+        durCell.textContent = dur === null ? '—' : `${dur} د`;
+        durCell.classList.toggle('empty', dur === null);
+      }
+    } else {
+      calcTotals();
+    }
+  }
+});
+
+deliveryList.addEventListener('change', (e)=>{
+  const row = e.target.closest('.delivery-row');
+  if(!row) return;
+  const id = Number(row.dataset.id);
+  const field = e.target.getAttribute('data-field');
+  if(!field) return;
+  const obj = deliveries.find(d=>d.id===id);
+  if(obj){ obj[field] = e.target.value; calcTotals(); }
+});
+
+deliveryList.addEventListener('click', (e)=>{
+  const startBtn = e.target.closest('[data-set-start]');
+  if(startBtn){
+    const id = Number(startBtn.getAttribute('data-set-start'));
+    const obj = deliveries.find(d=>d.id===id);
+    if(obj){ obj.startTime = nowHHMM(); renderDeliveries(); }
+    return;
+  }
+  const endBtn = e.target.closest('[data-set-end]');
+  if(endBtn){
+    const id = Number(endBtn.getAttribute('data-set-end'));
+    const obj = deliveries.find(d=>d.id===id);
+    if(obj){ obj.endTime = nowHHMM(); renderDeliveries(); }
+    return;
+  }
+  const delBtn = e.target.closest('[data-remove-delivery]');
+  if(delBtn){
+    removeDelivery(Number(delBtn.getAttribute('data-remove-delivery')));
+  }
+});
+
+expenseList.addEventListener('input', (e)=>{
+  const row = e.target.closest('.expense-row');
+  if(!row) return;
+  const id = Number(row.dataset.eid);
+  const field = e.target.getAttribute('data-efield');
+  const obj = expenses.find(x=>x.id===id);
+  if(obj && field){ obj[field] = e.target.value; calcTotals(); }
+});
+expenseList.addEventListener('click', (e)=>{
+  const btn = e.target.closest('[data-remove-expense]');
+  if(btn){ removeExpense(Number(btn.getAttribute('data-remove-expense'))); }
+});
+
+$('#addDeliveryBtn').addEventListener('click', ()=> addDelivery());
+$('#addExpenseBtn').addEventListener('click', ()=> addExpense());
+$('#reportDate').valueAsDate = new Date();
+
+/* ---------- Save Shift to Firebase ---------- */
+const saveToFirebaseBtn = $('#saveToFirebaseBtn');
+if(saveToFirebaseBtn) {
+  saveToFirebaseBtn.addEventListener('click', async () => {
+    const totals = calcTotals();
+    if(totals.count === 0 && expenses.length === 0) {
+      alert("لا يوجد بيانات لحفظها!");
+      return;
+    }
+
+    saveToFirebaseBtn.textContent = "جاري الحفظ...";
+    saveToFirebaseBtn.disabled = true;
 
     try {
-      // تجميع بيانات التقرير
-      const reportData = {
-        date: document.getElementById('reportDate').value,
-        shiftStart: document.getElementById('shiftStart').value,
-        shiftEnd: document.getElementById('shiftEnd').value,
-        extraNotes: document.getElementById('extraNotes').value,
-        signerName: document.getElementById('signerName').value,
-        handoverTime: document.getElementById('handoverTime').value,
+      const shiftData = {
+        date: $('#reportDate').value,
+        shiftStart: $('#shiftStart').value,
+        shiftEnd: $('#shiftEnd').value,
+        deliveries: deliveries,
+        expenses: expenses,
         totals: {
-          orders: totals.ordersCount.textContent,
-          time: totals.time.textContent,
-          orderValue: totals.orderValue.textContent,
-          cash: totals.cash.textContent,
-          fees: totals.fees.textContent,
-          expenses: totals.expTotal.textContent,
-          net: totals.net.textContent
+          ordersCount: totals.count,
+          totalMinutes: totals.totalMinutes,
+          orderValue: totals.orderValue,
+          cash: totals.cash,
+          fees: totals.fees,
+          net: totals.net,
+          expTotal: totals.expTotal,
+          netAfter: totals.netAfter
         },
+        extraNotes: $('#extraNotes').value,
+        signerName: $('#signerName').value,
+        handoverTime: $('#handoverTime').value,
         timestamp: new Date().toISOString()
       };
 
-      // حفظ التقرير في كولكشن "delivery_shifts"
-      await addDoc(collection(db, "delivery_shifts"), reportData);
-      
+      await addDoc(collection(db, "delivery_shifts"), shiftData);
       alert("✅ تم حفظ تقفيل الدليفري في قاعدة البيانات بنجاح!");
     } catch (error) {
       console.error("Error saving document: ", error);
       alert("❌ حدث خطأ أثناء الحفظ. يرجى المحاولة مرة أخرى.");
     } finally {
-      btn.textContent = "حفظ التقفيل في قاعدة البيانات";
-      btn.disabled = false;
+      saveToFirebaseBtn.textContent = "حفظ التقفيل في قاعدة البيانات";
+      saveToFirebaseBtn.disabled = false;
     }
   });
+}
 
-  // --- 5. أزرار التحكم (طباعة، مسح، واتساب) ---
-  
-  document.getElementById('printBtn').addEventListener('click', () => window.print());
-  
-  document.getElementById('resetBtn').addEventListener('click', () => {
-    if(confirm('هل أنت متأكد من مسح جميع البيانات؟')) {
-      deliveryList.innerHTML = '';
-      expenseList.innerHTML = '';
-      calculateTotals();
-    }
-  });
+/* ---------- WhatsApp ---------- */
+const WA_KEY = 'ssp_delivery_manager_wa';
+const waInput = $('#pharmacyWa');
+try{
+  const saved = localStorage.getItem(WA_KEY);
+  if(saved) waInput.value = saved;
+} catch(e){}
+waInput.addEventListener('input', ()=>{
+  try{ localStorage.setItem(WA_KEY, waInput.value.trim()); }catch(e){}
+});
 
-  document.getElementById('whatsappBtn').addEventListener('click', () => {
-    const phone = document.getElementById('pharmacyWa').value || '201000000000';
-    const text = `*تقفيل دليفري صيدليات شريف شعبان*%0a` +
-                 `التاريخ: ${document.getElementById('reportDate').value}%0a` +
-                 `إجمالي الطلبات: ${totals.ordersCount.textContent}%0a` +
-                 `الصافي للتسليم: ${totals.net.textContent} ج.م`;
-    window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
-  });
+$('#whatsappBtn').addEventListener('click', ()=>{
+  const totals = calcTotals();
+  const dateVal = $('#reportDate').value || '';
+  const dateAr = dateVal ? new Date(dateVal + 'T12:00:00').toLocaleDateString('ar-EG') : '—';
+  const notes = $('#extraNotes').value.trim() || 'لا يوجد';
+  const signer = $('#signerName').value.trim() || '—';
 
-  // تهيئة الشاشة عند الفتح
-  calculateTotals();
+  const timeTxt = totals.totalMinutes >= 60
+    ? `${Math.floor(totals.totalMinutes/60)} س ${totals.totalMinutes%60} د`    : `${totals.totalMinutes} دقيقة`;
+
+  const msg = [
+    '*تقفيل دليفري - صيدليات شريف شعبان*',
+    '——————————————',
+    `المسؤول: ${signer}`,
+    `التاريخ: ${dateAr}`,
+    '',
+    `عدد الطلبات: ${totals.count}`,
+    `إجمالي وقت التوصيل: ${timeTxt}`,
+    `إجمالي الطلبات: ${egp(totals.orderValue)} ج.م`,
+    `الكاش المحصل: ${egp(totals.cash)} ج.م`,
+    `رسوم التوصيل: ${egp(totals.fees)} ج.م`,
+    `مصروفات المناديب: ${egp(totals.expTotal)} ج.م`,
+    `*صافي التسليم للصيدلية: ${egp(totals.netAfter)} ج.م*`,
+    '',
+    `ملاحظات: ${notes}`
+  ].join('\n');
+
+  const cleanNumber = waInput.value.replace(/[^\d]/g,'');
+  const url = cleanNumber
+    ? `https://wa.me/${cleanNumber}?text=${encodeURIComponent(msg)}`    : `https://wa.me/?text=${encodeURIComponent(msg)}`;  
+  window.open(url, '_blank');
+});
+
+/* ---------- Print / Reset ---------- */
+$('#printBtn').addEventListener('click', ()=> window.print());
+$('#resetBtn').addEventListener('click', ()=>{
+  if(!confirm('هل تريد مسح كل البيانات الحالية؟\nClear all current entries?')) return;
+  deliveries = [];
+  expenses = [];
+  dId = 1; eId = 1;
+  $('#shiftStart').value = '';
+  $('#shiftEnd').value = '';
+  $('#extraNotes').value = '';
+  $('#signerName').value = '';
+  $('#handoverTime').value = '';
+  $('#reportDate').valueAsDate = new Date();
+  searchDeliveryPhone.value = '';
+  addDelivery();
+  renderExpenses();
+  calcTotals();
+  window.scrollTo({top:0, behavior:'smooth'});
+});
+
+/* ---------- Helpers ---------- */
+function escapeHtml(s){
+  return String(s ?? '')
+    .replace(/&/g,'&amp;')
+    .replace(/"/g,'&quot;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
+}
+
+/* ---------- Init ---------- */
+loadCustomersFromFirebase(); // Fetch customers in the background on load
+addDelivery();
+renderExpenses();
+calcTotals();
 </script>
 </body>
 </html>
