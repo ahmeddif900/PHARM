@@ -656,6 +656,54 @@ let dId = 1, eId = 1;
 
 const DRIVERS = ['يوسف', 'أحمد خالد',"يس رستم","مندوب "];
 
+/* ---------- Local Storage Draft (Auto Save) ---------- */
+const DRAFT_KEY = 'ssp_delivery_draft_v1';
+
+function saveDraft() {
+  const draftData = {
+    deliveries,
+    expenses,
+    dId,
+    eId,
+    shiftStart: $('#shiftStart')?.value || '',
+    shiftEnd: $('#shiftEnd')?.value || '',
+    extraNotes: $('#extraNotes')?.value || '',
+    signerName: $('#signerName')?.value || '',
+    handoverTime: $('#handoverTime')?.value || ''
+  };
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
+}
+
+function loadDraft() {
+  try {
+    const saved = localStorage.getItem(DRAFT_KEY);
+    if (saved) {
+      const draftData = JSON.parse(saved);
+      deliveries = draftData.deliveries || [];
+      expenses = draftData.expenses || [];
+      dId = draftData.dId || 1;
+      eId = draftData.eId || 1;
+      
+      if ($('#shiftStart')) $('#shiftStart').value = draftData.shiftStart || '';
+      if ($('#shiftEnd')) $('#shiftEnd').value = draftData.shiftEnd || '';
+      if ($('#extraNotes')) $('#extraNotes').value = draftData.extraNotes || '';
+      if ($('#signerName')) $('#signerName').value = draftData.signerName || '';
+      if ($('#handoverTime')) $('#handoverTime').value = draftData.handoverTime || '';
+      
+      return true; // تم إيجاد بيانات محفوظة
+    }
+  } catch(e) {
+    console.error("Error loading draft", e);
+  }
+  return false; // لا توجد بيانات
+}
+
+// الاستماع للتغييرات في الحقول الثابتة لحفظها فوراً
+['shiftStart', 'shiftEnd', 'extraNotes', 'signerName', 'handoverTime'].forEach(id => {
+  const el = $('#' + id);
+  if (el) el.addEventListener('input', saveDraft);
+});
+
 /* ---------- Deliveries UI ---------- */
 const deliveryList = $('#deliveryList');
 const emptyDeliveries = $('#emptyDeliveries');
@@ -825,6 +873,9 @@ function calcTotals(){
   const netBox = $('#netBox');
   if(net >= 0){ netBox.classList.add('cash-positive'); } else { netBox.classList.remove('cash-positive'); }
 
+  // حفظ التعديلات تلقائياً في التخزين المحلي بعد أي عملية حسابية
+  saveDraft();
+
   return {count, totalMinutes, orderValue, cash, fees, net, expTotal, netAfter};
 }
 
@@ -843,7 +894,6 @@ deliveryList.addEventListener('input', (e)=>{
     // --- FIREBASE CUSTOMER AUTO-FILL LOGIC ---
     if (field === 'customerMobile') {
       const typedPhone = e.target.value.trim();
-      // Search inside the firebaseCustomers array loaded on initialization
       const matchedCustomer = firebaseCustomers.find(c => c.phone1 === typedPhone || c.phone2 === typedPhone);
       
       if (matchedCustomer) {
@@ -961,6 +1011,11 @@ if(saveToFirebaseBtn) {
 
       await addDoc(collection(db, "delivery_shifts"), shiftData);
       alert("✅ تم حفظ تقفيل الدليفري في قاعدة البيانات بنجاح!");
+      
+      // تفريغ الـ Local Storage والنموذج بعد الحفظ الناجح للبدء من جديد
+      localStorage.removeItem(DRAFT_KEY);
+      resetForm(false); 
+      
     } catch (error) {
       console.error("Error saving document: ", error);
       alert("❌ حدث خطأ أثناء الحفظ. يرجى المحاولة مرة أخرى.");
@@ -1017,23 +1072,31 @@ $('#whatsappBtn').addEventListener('click', ()=>{
 
 /* ---------- Print / Reset ---------- */
 $('#printBtn').addEventListener('click', ()=> window.print());
-$('#resetBtn').addEventListener('click', ()=>{
-  if(!confirm('هل تريد مسح كل البيانات الحالية؟\nClear all current entries?')) return;
+
+function resetForm(confirmPrompt = true) {
+  if(confirmPrompt && !confirm('هل تريد مسح كل البيانات الحالية؟\nClear all current entries?')) return;
+  
+  localStorage.removeItem(DRAFT_KEY); // تفريغ الذاكرة المؤقتة
   deliveries = [];
   expenses = [];
   dId = 1; eId = 1;
-  $('#shiftStart').value = '';
-  $('#shiftEnd').value = '';
-  $('#extraNotes').value = '';
-  $('#signerName').value = '';
-  $('#handoverTime').value = '';
+  
+  if ($('#shiftStart')) $('#shiftStart').value = '';
+  if ($('#shiftEnd')) $('#shiftEnd').value = '';
+  if ($('#extraNotes')) $('#extraNotes').value = '';
+  if ($('#signerName')) $('#signerName').value = '';
+  if ($('#handoverTime')) $('#handoverTime').value = '';
+  
   $('#reportDate').valueAsDate = new Date();
   searchDeliveryPhone.value = '';
+  
   addDelivery();
   renderExpenses();
   calcTotals();
   window.scrollTo({top:0, behavior:'smooth'});
-});
+}
+
+$('#resetBtn').addEventListener('click', ()=> resetForm(true));
 
 /* ---------- Helpers ---------- */
 function escapeHtml(s){
@@ -1046,8 +1109,23 @@ function escapeHtml(s){
 
 /* ---------- Init ---------- */
 loadCustomersFromFirebase(); // Fetch customers in the background on load
-addDelivery();
-renderExpenses();
+
+// التحقق من وجود بيانات سابقة في المتصفح
+const hasDraft = loadDraft();
+
+if (hasDraft) {
+  // إذا كان هناك بيانات، قم بإعادة رسم الجداول
+  if (deliveries.length === 0) {
+    addDelivery();
+  } else {
+    renderDeliveries();
+  }
+  renderExpenses();
+} else {
+  // إذا لم يكن هناك بيانات سابقة، ابدأ بصفحة فارغة
+  addDelivery();
+  renderExpenses();
+}
 calcTotals();
 </script>
 </body>
