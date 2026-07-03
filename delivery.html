@@ -589,11 +589,23 @@ select{
     <div class="ms-block ms-net"><small>الصافي</small><b id="ms_net">0 ج.م</b></div>
   </div>
 <button id="saveToFirebaseBtn" class="btn-time start" type="button">حفظ التقفيل في قاعدة البيانات</button>
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Page Title</title>
+</head>
+<body>
+
+
+
+</body>
 <script type="module">
 /* ---------- Firebase Setup ---------- */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyCeVHkiZmMsweui1ZNAJKsTEJlNQYg3iuY",
   authDomain: "pharm-7b71a.firebaseapp.com",
@@ -607,20 +619,19 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/* ---------- Fetch Customers Data for Auto-fill ---------- */
-let firebaseCustomers = [];
-async function loadCustomersFromFirebase() {
+// جلب بيانات العملاء مرة واحدة عند فتح الصفحة لتشغيل الإكمال التلقائي للعنوان
+let loadedCustomers = [];
+async function loadCustomersForAutoFill() {
   try {
     const querySnapshot = await getDocs(collection(db, "customers"));
-    firebaseCustomers = [];
     querySnapshot.forEach((doc) => {
-      firebaseCustomers.push(doc.data());
+      loadedCustomers.push(doc.data());
     });
-    console.log("✅ تم تحميل بيانات العملاء بنجاح للبحث التلقائي:", firebaseCustomers.length);
-  } catch (error) {
-    console.error("❌ خطأ في تحميل بيانات العملاء:", error);
+  } catch (e) {
+    console.error("Error loading customers for autofill", e);
   }
 }
+loadCustomersForAutoFill();
 
 /* ---------- Utilities ---------- */
 const $ = (s, r=document)=>r.querySelector(s);
@@ -632,14 +643,12 @@ function nowHHMM(){
   const d = new Date();
   return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 }
-
 function parseMinutes(hhmm){
   if(!hhmm || !hhmm.includes(':')) return null;
   const [h, m] = hhmm.split(':').map(Number);
   if(isNaN(h) || isNaN(m)) return null;
   return h * 60 + m;
 }
-
 function calcDurationMinutes(start, end){
   const s = parseMinutes(start);
   const e = parseMinutes(end);
@@ -656,54 +665,6 @@ let dId = 1, eId = 1;
 
 const DRIVERS = ['يوسف', 'أحمد خالد',"يس رستم","مندوب "];
 
-/* ---------- Local Storage Draft (Auto Save) ---------- */
-const DRAFT_KEY = 'ssp_delivery_draft_v1';
-
-function saveDraft() {
-  const draftData = {
-    deliveries,
-    expenses,
-    dId,
-    eId,
-    shiftStart: $('#shiftStart')?.value || '',
-    shiftEnd: $('#shiftEnd')?.value || '',
-    extraNotes: $('#extraNotes')?.value || '',
-    signerName: $('#signerName')?.value || '',
-    handoverTime: $('#handoverTime')?.value || ''
-  };
-  localStorage.setItem(DRAFT_KEY, JSON.stringify(draftData));
-}
-
-function loadDraft() {
-  try {
-    const saved = localStorage.getItem(DRAFT_KEY);
-    if (saved) {
-      const draftData = JSON.parse(saved);
-      deliveries = draftData.deliveries || [];
-      expenses = draftData.expenses || [];
-      dId = draftData.dId || 1;
-      eId = draftData.eId || 1;
-      
-      if ($('#shiftStart')) $('#shiftStart').value = draftData.shiftStart || '';
-      if ($('#shiftEnd')) $('#shiftEnd').value = draftData.shiftEnd || '';
-      if ($('#extraNotes')) $('#extraNotes').value = draftData.extraNotes || '';
-      if ($('#signerName')) $('#signerName').value = draftData.signerName || '';
-      if ($('#handoverTime')) $('#handoverTime').value = draftData.handoverTime || '';
-      
-      return true; // تم إيجاد بيانات محفوظة
-    }
-  } catch(e) {
-    console.error("Error loading draft", e);
-  }
-  return false; // لا توجد بيانات
-}
-
-// الاستماع للتغييرات في الحقول الثابتة لحفظها فوراً
-['shiftStart', 'shiftEnd', 'extraNotes', 'signerName', 'handoverTime'].forEach(id => {
-  const el = $('#' + id);
-  if (el) el.addEventListener('input', saveDraft);
-});
-
 /* ---------- Deliveries UI ---------- */
 const deliveryList = $('#deliveryList');
 const emptyDeliveries = $('#emptyDeliveries');
@@ -712,7 +673,7 @@ const searchDeliveryPhone = $('#searchDeliveryPhone');
 function driverOptions(selected){
   let opts = '<option value="">اختر المندوب...</option>';
   DRIVERS.forEach(name => {
-    opts += `<option value="${name}" ${selected===name?'selected':''}>${name}</option>`;  
+    opts += `<option value="${name}" ${selected===name?'selected':''}>${name}</option>`;
   });
   return opts;
 }
@@ -721,6 +682,7 @@ function paymentOptions(selected){
   const opts = [
     ['cash','Cash / كاش'],
     ['card','Card / فيزا'],
+	['Credit','Credit / كرديت'],
     ['instapay','Instapay / انستاباي'],
     ['fawry','Fawry / فوري'],
     ['inaya','Inaya / عناية'],
@@ -735,11 +697,12 @@ function deliveryRowTemplate(d){
   const startHtml = d.startTime
     ? `<div class="time-input-wrap"><input class="input" type="time" data-field="startTime" value="${escapeHtml(d.startTime)}"><div class="time-ok">✓ بدء</div></div>`
     : `<button class="btn-time start" type="button" data-set-start="${d.id}">بدء</button>`;
+
   const endDisabled = !d.startTime;
   const endHtml = d.endTime
     ? `<div class="time-input-wrap"><input class="input" type="time" data-field="endTime" value="${escapeHtml(d.endTime)}"><div class="time-ok end-ok">✓ انتهاء</div></div>`
     : `<button class="btn-time end" type="button" data-set-end="${d.id}" ${endDisabled ? 'disabled' : ''}>انتهاء</button>`;
-  
+
   return `<div class="delivery-row" data-id="${d.id}">
     <div class="dcell"><input class="input" type="text" data-field="orderNo" placeholder="1024" value="${escapeHtml(d.orderNo||'')}" autocomplete="off"></div>
     <div class="dcell"><select data-field="driverName" style="padding-left:10px">${driverOptions(d.driverName)}</select></div>
@@ -761,6 +724,7 @@ function renderDeliveries(){
   const tableWrap = document.querySelector('.delivery-table-wrap');
   const phoneQuery = searchDeliveryPhone.value.trim().toLowerCase();
 
+  // Filter the rows for display based on the search input
   const filteredDeliveries = deliveries.filter(d => {
     return phoneQuery === '' || (d.customerMobile || '').toLowerCase().includes(phoneQuery);
   });
@@ -780,20 +744,29 @@ function renderDeliveries(){
     if(tableWrap) tableWrap.style.display = '';
     deliveryList.innerHTML = filteredDeliveries.map(deliveryRowTemplate).join('');
   }
-  
+
   calcTotals();
 }
 
+// Re-render when typing in the search bar
 searchDeliveryPhone.addEventListener('input', renderDeliveries);
 
 function addDelivery(data={}){
   deliveries.push({ id: dId++, orderNo:'', driverName:'', customerMobile:'', area:'', startTime:'', endTime:'', orderTotal:'', cash:'', fee:'', pay:'cash', notes:'', ...data });
-  if(searchDeliveryPhone.value) searchDeliveryPhone.value = '';
+
+  if(searchDeliveryPhone.value) {
+    searchDeliveryPhone.value = '';
+  }
+  $$('.input, textarea').forEach(el => {
+  el.addEventListener('input', saveLocalDraft);
+  });
+
   renderDeliveries();
 }
 
 function removeDelivery(id){
   deliveries = deliveries.filter(d => d.id !== id);
+
   renderDeliveries();
 }
 
@@ -823,11 +796,12 @@ function renderExpenses(){
 
 function addExpense(data={}){
   expenses.push({id:eId++, amount:'', reason:'', ...data});
+
   renderExpenses();
 }
-
 function removeExpense(id){
   expenses = expenses.filter(e => e.id !== id);
+
   renderExpenses();
 }
 
@@ -836,7 +810,7 @@ function calcTotals(){
   const rows = deliveries; 
   const count = rows.length;
   let orderValue = 0, cash = 0, fees = 0, totalMinutes = 0;
-  
+
   rows.forEach(r=>{
     orderValue += toNum(r.orderTotal);
     cash += toNum(r.cash);
@@ -873,8 +847,8 @@ function calcTotals(){
   const netBox = $('#netBox');
   if(net >= 0){ netBox.classList.add('cash-positive'); } else { netBox.classList.remove('cash-positive'); }
 
-  // حفظ التعديلات تلقائياً في التخزين المحلي بعد أي عملية حسابية
-  saveDraft();
+  // إصلاح أساسي: حفظ مسودة البيانات محلياً فور حساب أي إجماليات جديدة تلقائياً
+  saveLocalDraft();
 
   return {count, totalMinutes, orderValue, cash, fees, net, expTotal, netAfter};
 }
@@ -887,18 +861,19 @@ deliveryList.addEventListener('input', (e)=>{
   const field = e.target.getAttribute('data-field');
   if(!field) return;
   const obj = deliveries.find(d=>d.id===id);
-  
+
   if(obj){
     obj[field] = e.target.value;
-    
-    // --- FIREBASE CUSTOMER AUTO-FILL LOGIC ---
+
+    // --- CUSTOMER AUTO-FILL LOGIC ---
     if (field === 'customerMobile') {
       const typedPhone = e.target.value.trim();
-      const matchedCustomer = firebaseCustomers.find(c => c.phone1 === typedPhone || c.phone2 === typedPhone);
-      
+      const savedCustomers = loadedCustomers; 
+      const matchedCustomer = savedCustomers.find(c => c.phone1 === typedPhone || c.phone2 === typedPhone);
+
       if (matchedCustomer) {
-        obj.area = matchedCustomer.address || '';
-        let autoNotes = matchedCustomer.name || '';
+        obj.area = matchedCustomer.address;
+        let autoNotes = matchedCustomer.name;
         if (matchedCustomer.discount) autoNotes += ` (خصم ${matchedCustomer.discount}%)`;
         if (matchedCustomer.notes) autoNotes += ` - ${matchedCustomer.notes}`;
         obj.notes = autoNotes;
@@ -910,7 +885,7 @@ deliveryList.addEventListener('input', (e)=>{
       }
     }
     // --------------------------------
-    
+
     if(field === 'startTime' || field === 'endTime'){
       calcTotals();
       const dur = calcDurationMinutes(obj.startTime, obj.endTime);
@@ -924,7 +899,6 @@ deliveryList.addEventListener('input', (e)=>{
     }
   }
 });
-
 deliveryList.addEventListener('change', (e)=>{
   const row = e.target.closest('.delivery-row');
   if(!row) return;
@@ -934,7 +908,6 @@ deliveryList.addEventListener('change', (e)=>{
   const obj = deliveries.find(d=>d.id===id);
   if(obj){ obj[field] = e.target.value; calcTotals(); }
 });
-
 deliveryList.addEventListener('click', (e)=>{
   const startBtn = e.target.closest('[data-set-start]');
   if(startBtn){
@@ -971,60 +944,8 @@ expenseList.addEventListener('click', (e)=>{
 
 $('#addDeliveryBtn').addEventListener('click', ()=> addDelivery());
 $('#addExpenseBtn').addEventListener('click', ()=> addExpense());
+
 $('#reportDate').valueAsDate = new Date();
-
-/* ---------- Save Shift to Firebase ---------- */
-const saveToFirebaseBtn = $('#saveToFirebaseBtn');
-if(saveToFirebaseBtn) {
-  saveToFirebaseBtn.addEventListener('click', async () => {
-    const totals = calcTotals();
-    if(totals.count === 0 && expenses.length === 0) {
-      alert("لا يوجد بيانات لحفظها!");
-      return;
-    }
-
-    saveToFirebaseBtn.textContent = "جاري الحفظ...";
-    saveToFirebaseBtn.disabled = true;
-
-    try {
-      const shiftData = {
-        date: $('#reportDate').value,
-        shiftStart: $('#shiftStart').value,
-        shiftEnd: $('#shiftEnd').value,
-        deliveries: deliveries,
-        expenses: expenses,
-        totals: {
-          ordersCount: totals.count,
-          totalMinutes: totals.totalMinutes,
-          orderValue: totals.orderValue,
-          cash: totals.cash,
-          fees: totals.fees,
-          net: totals.net,
-          expTotal: totals.expTotal,
-          netAfter: totals.netAfter
-        },
-        extraNotes: $('#extraNotes').value,
-        signerName: $('#signerName').value,
-        handoverTime: $('#handoverTime').value,
-        timestamp: new Date().toISOString()
-      };
-
-      await addDoc(collection(db, "delivery_shifts"), shiftData);
-      alert("✅ تم حفظ تقفيل الدليفري في قاعدة البيانات بنجاح!");
-      
-      // تفريغ الـ Local Storage والنموذج بعد الحفظ الناجح للبدء من جديد
-      localStorage.removeItem(DRAFT_KEY);
-      resetForm(false); 
-      
-    } catch (error) {
-      console.error("Error saving document: ", error);
-      alert("❌ حدث خطأ أثناء الحفظ. يرجى المحاولة مرة أخرى.");
-    } finally {
-      saveToFirebaseBtn.textContent = "حفظ التقفيل في قاعدة البيانات";
-      saveToFirebaseBtn.disabled = false;
-    }
-  });
-}
 
 /* ---------- WhatsApp ---------- */
 const WA_KEY = 'ssp_delivery_manager_wa';
@@ -1045,7 +966,8 @@ $('#whatsappBtn').addEventListener('click', ()=>{
   const signer = $('#signerName').value.trim() || '—';
 
   const timeTxt = totals.totalMinutes >= 60
-    ? `${Math.floor(totals.totalMinutes/60)} س ${totals.totalMinutes%60} د`    : `${totals.totalMinutes} دقيقة`;
+    ? `${Math.floor(totals.totalMinutes/60)} س ${totals.totalMinutes%60} د`
+    : `${totals.totalMinutes} دقيقة`;
 
   const msg = [
     '*تقفيل دليفري - صيدليات شريف شعبان*',
@@ -1066,37 +988,73 @@ $('#whatsappBtn').addEventListener('click', ()=>{
 
   const cleanNumber = waInput.value.replace(/[^\d]/g,'');
   const url = cleanNumber
-    ? `https://wa.me/${cleanNumber}?text=${encodeURIComponent(msg)}`    : `https://wa.me/?text=${encodeURIComponent(msg)}`;  
+    ? `https://wa.me/${cleanNumber}?text=${encodeURIComponent(msg)}`
+    : `https://wa.me/?text=${encodeURIComponent(msg)}`;
   window.open(url, '_blank');
 });
 
 /* ---------- Print / Reset ---------- */
 $('#printBtn').addEventListener('click', ()=> window.print());
-
-function resetForm(confirmPrompt = true) {
-  if(confirmPrompt && !confirm('هل تريد مسح كل البيانات الحالية؟\nClear all current entries?')) return;
-  
-  localStorage.removeItem(DRAFT_KEY); // تفريغ الذاكرة المؤقتة
+$('#resetBtn').addEventListener('click', ()=>{
+  if(!confirm('هل تريد مسح كل البيانات الحالية؟\nClear all current entries?')) return;
+  localStorage.removeItem(DRAFT_KEY); // تفريغ التخزين المحلي عند التصفير
   deliveries = [];
   expenses = [];
   dId = 1; eId = 1;
-  
-  if ($('#shiftStart')) $('#shiftStart').value = '';
-  if ($('#shiftEnd')) $('#shiftEnd').value = '';
-  if ($('#extraNotes')) $('#extraNotes').value = '';
-  if ($('#signerName')) $('#signerName').value = '';
-  if ($('#handoverTime')) $('#handoverTime').value = '';
-  
+  $('#shiftStart').value = '';
+  $('#shiftEnd').value = '';
+  $('#extraNotes').value = '';
+  $('#signerName').value = '';
+  $('#handoverTime').value = '';
   $('#reportDate').valueAsDate = new Date();
   searchDeliveryPhone.value = '';
-  
   addDelivery();
   renderExpenses();
   calcTotals();
   window.scrollTo({top:0, behavior:'smooth'});
+});
+
+const DRAFT_KEY = 'ssp_delivery_draft';
+
+// Saves the entire page state to localStorage
+function saveLocalDraft() {
+  const draft = {
+    handoverTime: $('#handoverTime').value,
+    reportDate: $('#reportDate')?.value || '',
+    shiftStart: $('#shiftStart')?.value || '',
+    shiftEnd: $('#shiftEnd')?.value || '',
+    extraNotes: $('#extraNotes')?.value || '',
+    signerName: $('#signerName')?.value || '',
+    handoverTime: $('#handoverTime')?.value || '',
+    deliveries: deliveries,
+    expenses: expenses,
+    dId: dId,
+    eId: eId
+  };
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
 }
 
-$('#resetBtn').addEventListener('click', ()=> resetForm(true));
+// Loads the draft back when the page reopens
+function loadLocalDraft() {
+  const saved = localStorage.getItem(DRAFT_KEY);
+  if (saved) {
+    try {
+      const draft = JSON.parse(saved);
+      if($('#reportDate')) $('#reportDate').value = draft.reportDate || '';
+      if($('#shiftStart')) $('#shiftStart').value = draft.shiftStart || '';
+      if($('#shiftEnd')) $('#shiftEnd').value = draft.shiftEnd || '';
+      if($('#extraNotes')) $('#extraNotes').value = draft.extraNotes || '';
+      if($('#signerName')) $('#signerName').value = draft.signerName || '';
+      if($('#handoverTime')) $('#handoverTime').value = draft.handoverTime || '';
+      deliveries = draft.deliveries || [];
+      expenses = draft.expenses || [];
+      dId = draft.dId || 1;
+      eId = draft.eId || 1;
+    } catch (e) {
+      console.error("Error restoring local draft", e);
+    }
+  }
+}
 
 /* ---------- Helpers ---------- */
 function escapeHtml(s){
@@ -1106,27 +1064,70 @@ function escapeHtml(s){
     .replace(/</g,'&lt;')
     .replace(/>/g,'&gt;');
 }
+/* ---------- Firebase Save ---------- */
+document.getElementById('saveToFirebaseBtn')?.addEventListener('click', async () => {
+  const totals = calcTotals();
+  const signer = $('#signerName').value.trim();
+  const dateVal = $('#reportDate').value;
+
+  if (!signer) {
+    alert("برجاء كتابة اسم المسؤول أولاً قبل الحفظ!");
+    return;
+  }
+
+  const shiftReportData = {
+    reportDate: dateVal,
+    signerName: signer,
+    shiftStart: $('#shiftStart').value,
+    shiftEnd: $('#shiftEnd').value,
+    extraNotes: $('#extraNotes').value,
+    deliveries: deliveries, 
+    expenses: expenses,     
+    totals: totals,         
+    timestamp: new Date().toISOString()
+  };
+
+  try {
+    const btn = document.getElementById('saveToFirebaseBtn');
+    btn.textContent = 'جاري الحفظ...';
+    btn.disabled = true;
+
+    await addDoc(collection(db, "delivery_reports"), shiftReportData);
+
+    alert("تم حفظ التقفيل في قاعدة البيانات بنجاح!");
+    btn.textContent = 'حفظ التقفيل في قاعدة البيانات';
+    btn.disabled = false;
+
+    // اختيار اختياري: مسح المسودة المحلية بعد الرفع الناجح لقاعدة البيانات حتى لا تتكرر البيانات
+    localStorage.removeItem(DRAFT_KEY);
+    
+  } catch (error) {
+    console.error("Error saving document: ", error);
+    alert("حدث خطأ أثناء الحفظ! تأكد من اتصالك بالإنترنت.");
+    document.getElementById('saveToFirebaseBtn').disabled = false;
+  }
+});
 
 /* ---------- Init ---------- */
-loadCustomersFromFirebase(); // Fetch customers in the background on load
+// 1. استدعاء المسودة المخزنة أولاً
+loadLocalDraft();
 
-// التحقق من وجود بيانات سابقة في المتصفح
-const hasDraft = loadDraft();
-
-if (hasDraft) {
-  // إذا كان هناك بيانات، قم بإعادة رسم الجداول
-  if (deliveries.length === 0) {
-    addDelivery();
-  } else {
-    renderDeliveries();
-  }
-  renderExpenses();
-} else {
-  // إذا لم يكن هناك بيانات سابقة، ابدأ بصفحة فارغة
-  addDelivery();
-  renderExpenses();
+// 2. إذا لم تكن هناك بيانات مخزنة، قم بإنشاء صف فارغ افتراضي للبدء
+if (deliveries.length === 0) { 
+  addDelivery(); 
 }
+
+// 3. بناء الجدولين وحساب القيم
+renderDeliveries();
+renderExpenses();
 calcTotals();
+
+// 4. مستمع عام على مستوى الصفحة لمراقبة أي مدخلات نصية علوية (اسم المسؤول، التاريخ، الملاحظات) لحفظها فوراً
+document.addEventListener('input', saveLocalDraft);
+document.addEventListener('change', saveLocalDraft);
+
 </script>
+</html>
+
 </body>
 </html>
