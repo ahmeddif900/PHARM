@@ -589,524 +589,265 @@ select{
     <div class="ms-block ms-net"><small>الصافي</small><b id="ms_net">0 ج.م</b></div>
   </div>
 <button id="saveToFirebaseBtn" class="btn-time start" type="button">حفظ التقفيل في قاعدة البيانات</button>
-<button id="saveToFirebaseBtn" class="btn-time start" type="button">حفظ التقفيل في قاعدة البيانات</button>
 <script type="module">
-/* ---------- Firebase Setup ---------- */
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+  // 1. Import Firebase tools
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+  import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyCeVHkiZmMsweui1ZNAJKsTEJlNQYg3iuY",
-  authDomain: "pharm-7b71a.firebaseapp.com",
-  projectId: "pharm-7b71a",
-  storageBucket: "pharm-7b71a.firebasestorage.app",
-  messagingSenderId: "422760369118",
-  appId: "1:422760369118:web:79046658a5c6a84dea2b4f",
-  measurementId: "G-Y7GHKEGM1Z"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-// جلب بيانات العملاء مرة واحدة عند فتح الصفحة لتشغيل الإكمال التلقائي للعنوان
-let loadedCustomers = [];
-async function loadCustomersForAutoFill() {
-  try {
-    const querySnapshot = await getDocs(collection(db, "customers"));
-    querySnapshot.forEach((doc) => {
-      loadedCustomers.push(doc.data());
-    });
-  } catch (e) {
-    console.error("Error loading customers for autofill", e);
-  }
-}
-loadCustomersForAutoFill();
-
-/* ---------- Utilities ---------- */
-const $ = (s, r=document)=>r.querySelector(s);
-const $$ = (s, r=document)=>Array.from(r.querySelectorAll(s));
-const egp = n => (isFinite(n) ? Number(n).toLocaleString('en-US', {maximumFractionDigits:2}) : '0');
-const toNum = v => { const n = parseFloat(String(v).replace(/,/g,'')); return isFinite(n) ? n : 0; };
-
-function nowHHMM(){
-  const d = new Date();
-  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
-}
-function parseMinutes(hhmm){
-  if(!hhmm || !hhmm.includes(':')) return null;
-  const [h, m] = hhmm.split(':').map(Number);
-  if(isNaN(h) || isNaN(m)) return null;
-  return h * 60 + m;
-}
-function calcDurationMinutes(start, end){
-  const s = parseMinutes(start);
-  const e = parseMinutes(end);
-  if(s === null || e === null) return null;
-  let diff = e - s;
-  if(diff < 0) diff += 1440; 
-  return diff;
-}
-
-/* ---------- State ---------- */
-let deliveries = [];
-let expenses = [];
-let dId = 1, eId = 1;
-
-const DRIVERS = ['يوسف', 'أحمد خالد',"يس رستم","مندوب "];
-
-/* ---------- Deliveries UI ---------- */
-const deliveryList = $('#deliveryList');
-const emptyDeliveries = $('#emptyDeliveries');
-const searchDeliveryPhone = $('#searchDeliveryPhone');
-
-function driverOptions(selected){
-  let opts = '<option value="">اختر المندوب...</option>';
-  DRIVERS.forEach(name => {
-    opts += `<option value="${name}" ${selected===name?'selected':''}>${name}</option>`;
-  });
-  return opts;
-}
-
-function paymentOptions(selected){
-  const opts = [
-    ['cash','Cash / كاش'],
-    ['card','Card / فيزا'],
-    ['instapay','Instapay / انستاباي'],
-    ['fawry','Fawry / فوري'],
-    ['credit','Credit / كرديت'],
-    ['inaya','Inaya / عناية'],
-    ['wallet','Wallet / محفظة'],
-  ];
-  return opts.map(([v,l]) => `<option value="${v}" ${selected===v?'selected':''}>${l}</option>`).join('');
-}
-
-function deliveryRowTemplate(d){
-  const dur = calcDurationMinutes(d.startTime, d.endTime);
-  const durText = dur === null ? '—' : `${dur} د`;
-  const startHtml = d.startTime
-    ? `<div class="time-input-wrap"><input class="input" type="time" data-field="startTime" value="${escapeHtml(d.startTime)}"><div class="time-ok">✓ بدء</div></div>`
-    : `<button class="btn-time start" type="button" data-set-start="${d.id}">بدء</button>`;
-
-  const endDisabled = !d.startTime;
-  const endHtml = d.endTime
-    ? `<div class="time-input-wrap"><input class="input" type="time" data-field="endTime" value="${escapeHtml(d.endTime)}"><div class="time-ok end-ok">✓ انتهاء</div></div>`
-    : `<button class="btn-time end" type="button" data-set-end="${d.id}" ${endDisabled ? 'disabled' : ''}>انتهاء</button>`;
-
-  return `<div class="delivery-row" data-id="${d.id}">
-    <div class="dcell"><input class="input" type="text" data-field="orderNo" placeholder="1024" value="${escapeHtml(d.orderNo||'')}" autocomplete="off"></div>
-    <div class="dcell"><select data-field="driverName" style="padding-left:10px">${driverOptions(d.driverName)}</select></div>
-    <div class="dcell"><input class="input" type="tel" inputmode="tel" data-field="customerMobile" placeholder="01xxxxxxxxx" value="${escapeHtml(d.customerMobile||'')}" dir="ltr"></div>
-    <div class="dcell"><input class="input" type="text" data-field="area" placeholder="سموحة" value="${escapeHtml(d.area||'')}"></div>
-    <div class="dcell">${startHtml}</div>
-    <div class="dcell">${endHtml}</div>
-    <div class="dcell"><div class="duration-cell ${dur===null?'empty':''}">${durText}</div></div>
-    <div class="dcell"><input class="input" type="number" inputmode="decimal" step="0.01" min="0" data-field="orderTotal" placeholder="0" value="${escapeHtml(d.orderTotal||'')}"></div>
-    <div class="dcell"><input class="input" type="number" inputmode="decimal" step="0.01" min="0" data-field="cash" placeholder="0" value="${escapeHtml(d.cash||'')}"></div>
-    <div class="dcell"><input class="input" type="number" inputmode="decimal" step="0.01" min="0" data-field="fee" placeholder="0" value="${escapeHtml(d.fee||'')}"></div>
-    <div class="dcell"><select data-field="pay">${paymentOptions(d.pay)}</select></div>
-    <div class="dcell"><input class="input" type="text" data-field="notes" placeholder="—" value="${escapeHtml(d.notes||'')}"></div>
-    <div class="dcell" style="display:flex;justify-content:center"><button class="icon-btn" type="button" data-remove-delivery="${d.id}" title="حذف">✕</button></div>
-  </div>`;
-}
-
-function renderDeliveries(){
-  const tableWrap = document.querySelector('.delivery-table-wrap');
-  const phoneQuery = searchDeliveryPhone.value.trim().toLowerCase();
-
-  const filteredDeliveries = deliveries.filter(d => {
-    return phoneQuery === '' || (d.customerMobile || '').toLowerCase().includes(phoneQuery);
-  });
-
-  if(deliveries.length === 0){
-    deliveryList.innerHTML = '';
-    emptyDeliveries.style.display = '';
-    emptyDeliveries.textContent = 'لا توجد طلبات بعد — اضغط "إضافة طلب" بالأسفل';
-    if(tableWrap) tableWrap.style.display = 'none';
-  } else if (filteredDeliveries.length === 0) {
-    deliveryList.innerHTML = '';
-    emptyDeliveries.style.display = '';
-    emptyDeliveries.textContent = 'لا توجد نتائج تطابق بحثك';
-    if(tableWrap) tableWrap.style.display = 'none';
-  } else {
-    emptyDeliveries.style.display = 'none';
-    if(tableWrap) tableWrap.style.display = '';
-    deliveryList.innerHTML = filteredDeliveries.map(deliveryRowTemplate).join('');
-  }
-  
-  calcTotals();
-}
-
-searchDeliveryPhone.addEventListener('input', renderDeliveries);
-
-function addDelivery(data={}){
-  deliveries.push({ id: dId++, orderNo:'', driverName:'', customerMobile:'', area:'', startTime:'', endTime:'', orderTotal:'', cash:'', fee:'', pay:'cash', notes:'', ...data });
-  
-  if(searchDeliveryPhone.value) {
-    searchDeliveryPhone.value = '';
-  }
-
-  renderDeliveries();
-}
-
-function removeDelivery(id){
-  deliveries = deliveries.filter(d => d.id !== id);
-  renderDeliveries();
-}
-
-/* ---------- Expenses ---------- */
-const expenseList = $('#expenseList');
-
-function expenseRowTemplate(e){
-  return `<div class="expense-row" data-eid="${e.id}">
-    <div>
-      <div class="exp-label">المبلغ</div>
-      <input class="input" type="number" inputmode="decimal" step="0.01" min="0" data-efield="amount" placeholder="0" value="${escapeHtml(e.amount||'')}">
-    </div>
-    <div class="exp-reason">
-      <div class="exp-label">السبب واسم المندوب</div>
-      <input class="input" type="text" data-efield="reason" placeholder="موصلات ..." value="${escapeHtml(e.reason||'')}">
-    </div>
-    <div style="display:flex;align-items:end;height:100%">
-      <button class="icon-btn" type="button" data-remove-expense="${e.id}" style="width:44px;justify-content:center">✕</button>
-    </div>
-  </div>`;
-}
-
-function renderExpenses(){
-  expenseList.innerHTML = expenses.map(expenseRowTemplate).join('');
-  calcTotals();
-}
-
-function addExpense(data={}){
-  expenses.push({id:eId++, amount:'', reason:'', ...data});
-  renderExpenses();
-}
-function removeExpense(id){
-  expenses = expenses.filter(e => e.id !== id);
-  renderExpenses();
-}
-
-/* ---------- Totals ---------- */
-function calcTotals(){
-  const rows = deliveries; 
-  const count = rows.length;
-  let orderValue = 0, cash = 0, fees = 0, totalMinutes = 0;
-  
-  rows.forEach(r=>{
-    orderValue += toNum(r.orderTotal);
-    cash += toNum(r.cash);
-    fees += toNum(r.fee);
-    const dur = calcDurationMinutes(r.startTime, r.endTime);
-    if(dur !== null) totalMinutes += dur;
-  });
-  const net = cash - fees;
-
-  let expTotal = 0;
-  expenses.forEach(x => { expTotal += toNum(x.amount); });
-  const netAfter = net - expTotal;
-
-  $('#t_orders').textContent = count;
-  $('#t_time').textContent = totalMinutes;
-  $('#t_orderValue').textContent = egp(orderValue);
-  $('#t_cash').textContent = egp(cash);
-  $('#t_fees').textContent = egp(fees);
-  $('#t_net').textContent = egp(net);
-
-  $('#exp_total').textContent = egp(expTotal);
-  $('#exp_net_after').textContent = egp(netAfter);
-
-  $('#sumBarCount').textContent = count;
-  $('#sumBarTime').textContent = totalMinutes;
-  $('#sumBarOrders').textContent = egp(orderValue);
-  $('#sumBarCash').textContent = egp(cash);
-  $('#sumBarFees').textContent = egp(fees);
-
-  $('#ms_orders').textContent = count;
-  $('#ms_cash').textContent = egp(cash) + ' ج.م';
-  $('#ms_net').textContent = egp(netAfter) + ' ج.م';
-
-  const netBox = $('#netBox');
-  if(net >= 0){ netBox.classList.add('cash-positive'); } else { netBox.classList.remove('cash-positive'); }
-
-  // إصلاح أساسي: حفظ مسودة البيانات محلياً فور حساب أي إجماليات جديدة تلقائياً
-  saveLocalDraft();
-
-  return {count, totalMinutes, orderValue, cash, fees, net, expTotal, netAfter};
-}
-
-/* ---------- Events ---------- */
-deliveryList.addEventListener('input', (e)=>{
-  const row = e.target.closest('.delivery-row');
-  if(!row) return;
-  const id = Number(row.dataset.id);
-  const field = e.target.getAttribute('data-field');
-  if(!field) return;
-  const obj = deliveries.find(d=>d.id===id);
-  
-  if(obj){
-    obj[field] = e.target.value;
-    
-    // --- CUSTOMER AUTO-FILL LOGIC ---
-    if (field === 'customerMobile') {
-      const typedPhone = e.target.value.trim();
-      const savedCustomers = loadedCustomers; 
-      const matchedCustomer = savedCustomers.find(c => c.phone1 === typedPhone || c.phone2 === typedPhone);
-      
-      if (matchedCustomer) {
-        obj.area = matchedCustomer.address;
-        let autoNotes = matchedCustomer.name;
-        if (matchedCustomer.discount) autoNotes += ` (خصم ${matchedCustomer.discount}%)`;
-        if (matchedCustomer.notes) autoNotes += ` - ${matchedCustomer.notes}`;
-        obj.notes = autoNotes;
-
-        const areaInput = row.querySelector('[data-field="area"]');
-        const notesInput = row.querySelector('[data-field="notes"]');
-        if (areaInput) areaInput.value = obj.area;
-        if (notesInput) notesInput.value = obj.notes;
-      }
-    }
-    // --------------------------------
-
-    if(field === 'startTime' || field === 'endTime'){
-      calcTotals();
-      const dur = calcDurationMinutes(obj.startTime, obj.endTime);
-      const durCell = row.querySelector('.duration-cell');
-      if(durCell){
-        durCell.textContent = dur === null ? '—' : `${dur} د`;
-        durCell.classList.toggle('empty', dur === null);
-      }
-    } else {
-      calcTotals();
-    }
-  }
-});
-deliveryList.addEventListener('change', (e)=>{
-  const row = e.target.closest('.delivery-row');
-  if(!row) return;
-  const id = Number(row.dataset.id);
-  const field = e.target.getAttribute('data-field');
-  if(!field) return;
-  const obj = deliveries.find(d=>d.id===id);
-  if(obj){ obj[field] = e.target.value; calcTotals(); }
-});
-deliveryList.addEventListener('click', (e)=>{
-  const startBtn = e.target.closest('[data-set-start]');
-  if(startBtn){
-    const id = Number(startBtn.getAttribute('data-set-start'));
-    const obj = deliveries.find(d=>d.id===id);
-    if(obj){ obj.startTime = nowHHMM(); renderDeliveries(); }
-    return;
-  }
-  const endBtn = e.target.closest('[data-set-end]');
-  if(endBtn){
-    const id = Number(endBtn.getAttribute('data-set-end'));
-    const obj = deliveries.find(d=>d.id===id);
-    if(obj){ obj.endTime = nowHHMM(); renderDeliveries(); }
-    return;
-  }
-  const delBtn = e.target.closest('[data-remove-delivery]');
-  if(delBtn){
-    removeDelivery(Number(delBtn.getAttribute('data-remove-delivery')));
-  }
-});
-
-expenseList.addEventListener('input', (e)=>{
-  const row = e.target.closest('.expense-row');
-  if(!row) return;
-  const id = Number(row.dataset.eid);
-  const field = e.target.getAttribute('data-efield');
-  const obj = expenses.find(x=>x.id===id);
-  if(obj && field){ obj[field] = e.target.value; calcTotals(); }
-});
-expenseList.addEventListener('click', (e)=>{
-  const btn = e.target.closest('[data-remove-expense]');
-  if(btn){ removeExpense(Number(btn.getAttribute('data-remove-expense'))); }
-});
-
-$('#addDeliveryBtn').addEventListener('click', ()=> addDelivery());
-$('#addExpenseBtn').addEventListener('click', ()=> addExpense());
-
-$('#reportDate').valueAsDate = new Date();
-
-/* ---------- WhatsApp ---------- */
-const WA_KEY = 'ssp_delivery_manager_wa';
-const waInput = $('#pharmacyWa');
-try{
-  const saved = localStorage.getItem(WA_KEY);
-  if(saved) waInput.value = saved;
-} catch(e){}
-waInput.addEventListener('input', ()=>{
-  try{ localStorage.setItem(WA_KEY, waInput.value.trim()); }catch(e){}
-});
-
-$('#whatsappBtn').addEventListener('click', ()=>{
-  const totals = calcTotals();
-  const dateVal = $('#reportDate').value || '';
-  const dateAr = dateVal ? new Date(dateVal + 'T12:00:00').toLocaleDateString('ar-EG') : '—';
-  const notes = $('#extraNotes').value.trim() || 'لا يوجد';
-  const signer = $('#signerName').value.trim() || '—';
-
-  const timeTxt = totals.totalMinutes >= 60
-    ? `${Math.floor(totals.totalMinutes/60)} س ${totals.totalMinutes%60} د`
-    : `${totals.totalMinutes} دقيقة`;
-
-  const msg = [
-    '*تقفيل دليفري - صيدليات شريف شعبان*',
-    '——————————————',
-    `المسؤول: ${signer}`,
-    `التاريخ: ${dateAr}`,
-    '',
-    `عدد الطلبات: ${totals.count}`,
-    `إجمالي وقت التوصيل: ${timeTxt}`,
-    `إجمالي الطلبات: ${egp(totals.orderValue)} ج.م`,
-    `الكاش المحصل: ${egp(totals.cash)} ج.م`,
-    `رسوم التوصيل: ${egp(totals.fees)} ج.م`,
-    `مصروفات المناديب: ${egp(totals.expTotal)} ج.م`,
-    `*صافي التسليم للصيدلية: ${egp(totals.netAfter)} ج.م*`,
-    '',
-    `ملاحظات: ${notes}`
-  ].join('\n');
-
-  const cleanNumber = waInput.value.replace(/[^\d]/g,'');
-  const url = cleanNumber
-    ? `https://wa.me/${cleanNumber}?text=${encodeURIComponent(msg)}`
-    : `https://wa.me/?text=${encodeURIComponent(msg)}`;
-  window.open(url, '_blank');
-});
-
-/* ---------- Print / Reset ---------- */
-$('#printBtn').addEventListener('click', ()=> window.print());
-$('#resetBtn').addEventListener('click', ()=>{
-  if(!confirm('هل تريد مسح كل البيانات الحالية؟\nClear all current entries?')) return;
-  localStorage.removeItem(DRAFT_KEY); // تفريغ التخزين المحلي عند التصفير
-  deliveries = [];
-  expenses = [];
-  dId = 1; eId = 1;
-  $('#shiftStart').value = '';
-  $('#shiftEnd').value = '';
-  $('#extraNotes').value = '';
-  $('#signerName').value = '';
-  $('#handoverTime').value = '';
-  $('#reportDate').valueAsDate = new Date();
-  searchDeliveryPhone.value = '';
-  addDelivery();
-  renderExpenses();
-  calcTotals();
-  window.scrollTo({top:0, behavior:'smooth'});
-});
-
-const DRAFT_KEY = 'ssp_delivery_draft';
-
-// Saves the entire page state to localStorage
-function saveLocalDraft() {
-  const draft = {
-    reportDate: $('#reportDate')?.value || '',
-    shiftStart: $('#shiftStart')?.value || '',
-    shiftEnd: $('#shiftEnd')?.value || '',
-    extraNotes: $('#extraNotes')?.value || '',
-    signerName: $('#signerName')?.value || '',
-    handoverTime: $('#handoverTime')?.value || '',
-    deliveries: deliveries,
-    expenses: expenses,
-    dId: dId,
-    eId: eId
+  // Your web app's Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyCeVHkiZmMsweui1ZNAJKsTEJlNQYg3iuY",
+    authDomain: "pharm-7b71a.firebaseapp.com",
+    projectId: "pharm-7b71a",
+    storageBucket: "pharm-7b71a.firebasestorage.app",
+    messagingSenderId: "422760369118",
+    appId: "1:422760369118:web:79046658a5c6a84dea2b4f",
+    measurementId: "G-Y7GHKEGM1Z"
   };
-  localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-}
+  
+  // 3. Initialize Firebase and Firestore
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
 
-// Loads the draft back when the page reopens
-function loadLocalDraft() {
-  const saved = localStorage.getItem(DRAFT_KEY);
-  if (saved) {
+  // Array to hold customer data locally
+  let customers = []; 
+  let editingFirebaseId = null;
+
+  // --- HTML ELEMENTS ---
+  const form = document.getElementById('customerForm');
+  const submitBtn = document.getElementById('submitBtn');
+  const cancelEditBtn = document.getElementById('cancelEditBtn');
+  const searchIdInput = document.getElementById('searchId');
+  const searchPhoneInput = document.getElementById('searchPhone');
+  const exportBtn = document.getElementById('exportExcelBtn');
+
+  // --- DATABASE FUNCTIONS ---
+
+  async function loadCustomers() {
     try {
-      const draft = JSON.parse(saved);
-      if($('#reportDate')) $('#reportDate').value = draft.reportDate || '';
-      if($('#shiftStart')) $('#shiftStart').value = draft.shiftStart || '';
-      if($('#shiftEnd')) $('#shiftEnd').value = draft.shiftEnd || '';
-      if($('#extraNotes')) $('#extraNotes').value = draft.extraNotes || '';
-      if($('#signerName')) $('#signerName').value = draft.signerName || '';
-      if($('#handoverTime')) $('#handoverTime').value = draft.handoverTime || '';
-      deliveries = draft.deliveries || [];
-      expenses = draft.expenses || [];
-      dId = draft.dId || 1;
-      eId = draft.eId || 1;
-    } catch (e) {
-      console.error("Error restoring local draft", e);
+      const querySnapshot = await getDocs(collection(db, "customers"));
+      customers = [];
+      querySnapshot.forEach((doc) => {
+        let data = doc.data();
+        data.firebaseId = doc.id; 
+        customers.push(data);
+      });
+      renderTable(); 
+    } catch (error) {
+      console.error("Error loading documents: ", error);
+      alert("خطأ في تحميل البيانات من فايربيز");
     }
   }
-}
 
-/* ---------- Helpers ---------- */
-function escapeHtml(s){
-  return String(s ?? '')
-    .replace(/&/g,'&amp;')
-    .replace(/"/g,'&quot;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;');
-}
-/* ---------- Firebase Save ---------- */
-document.getElementById('saveToFirebaseBtn')?.addEventListener('click', async () => {
-  const totals = calcTotals();
-  const signer = $('#signerName').value.trim();
-  const dateVal = $('#reportDate').value;
-  
-  if (!signer) {
-    alert("برجاء كتابة اسم المسؤول أولاً قبل الحفظ!");
-    return;
+  // Load data as soon as the page opens
+  document.addEventListener('DOMContentLoaded', loadCustomers);
+
+  // --- DUAL SEARCH LOGIC ---
+
+  function renderTable() {
+    const tbody = document.getElementById('customerTableBody');
+    const idQuery = searchIdInput ? searchIdInput.value.trim().toLowerCase() : '';
+    const phoneQuery = searchPhoneInput ? searchPhoneInput.value.trim().toLowerCase() : '';
+    
+    tbody.innerHTML = '';
+    
+    customers.forEach((c) => {
+      // Check ID match (using customerId for Firebase version)
+      const matchId = idQuery === '' || String(c.customerId || '').toLowerCase().includes(idQuery);
+      
+      // Check Phone match (checks both phone1 and phone2)
+      const matchPhone = phoneQuery === '' || 
+                        String(c.phone1 || '').toLowerCase().includes(phoneQuery) || 
+                        String(c.phone2 || '').toLowerCase().includes(phoneQuery);
+
+      // Render only if BOTH active search bars match the customer
+      if (matchId && matchPhone) {
+        tbody.innerHTML += `
+          <tr>
+            <td>${c.customerId || ''}</td>
+            <td>${c.name || ''}</td>
+            <td dir="ltr">${c.phone1 || ''} <br> <small>${c.phone2 || ''}</small></td>
+            <td>${c.address || ''}</td>
+            <td>${c.discount ? c.discount + '%' : '-'}</td>
+            <td>${c.notes || ''}</td>
+            <td>
+              <div class="action-btns">
+                <button class="btn-edit" onclick="window.editCustomer('${c.firebaseId}')" title="تعديل">✎</button>
+                <button class="btn-delete" onclick="window.deleteCustomer('${c.firebaseId}')" title="حذف">✕</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }
+    });
   }
 
-  const shiftReportData = {
-    reportDate: dateVal,
-    signerName: signer,
-    shiftStart: $('#shiftStart').value,
-    shiftEnd: $('#shiftEnd').value,
-    extraNotes: $('#extraNotes').value,
-    deliveries: deliveries, 
-    expenses: expenses,     
-    totals: totals,         
-    timestamp: new Date().toISOString()
+  // Listen for typing in both search bars
+  if (searchIdInput) searchIdInput.addEventListener('input', renderTable);
+  if (searchPhoneInput) searchPhoneInput.addEventListener('input', renderTable);
+
+
+  // --- EDIT AND DELETE FUNCTIONS ---
+
+  window.deleteCustomer = async function(firebaseId) {
+    if(confirm("هل أنت متأكد من حذف هذا العميل؟")) {
+      // If deleting the currently edited customer, reset the form
+      if (editingFirebaseId === firebaseId && cancelEditBtn) {
+        cancelEditBtn.click();
+      }
+      
+      try {
+        await deleteDoc(doc(db, "customers", firebaseId));
+        // Remove from local array immediately for UI speed, then re-render
+        customers = customers.filter(c => c.firebaseId !== firebaseId);
+        renderTable();
+      } catch (error) {
+        console.error("Error deleting document: ", error);
+        alert("حدث خطأ أثناء الحذف!");
+      }
+    }
   };
 
-  try {
-    const btn = document.getElementById('saveToFirebaseBtn');
-    btn.textContent = 'جاري الحفظ...';
-    btn.disabled = true;
+  window.editCustomer = function(firebaseId) {
+    const c = customers.find(cust => cust.firebaseId === firebaseId);
+    if(c) {
+      document.getElementById('custId').value = c.customerId || '';
+      document.getElementById('custName').value = c.name || '';
+      document.getElementById('custPhone1').value = c.phone1 || '';
+      document.getElementById('custPhone2').value = c.phone2 || '';
+      document.getElementById('custAddress').value = c.address || '';
+      document.getElementById('custDiscount').value = c.discount || '';
+      document.getElementById('custNotes').value = c.notes || '';
+      
+      editingFirebaseId = firebaseId; // Set edit mode
+      
+      // Update UI for editing
+      if (submitBtn) {
+        submitBtn.textContent = "تحديث بيانات العميل";
+        submitBtn.classList.add('btn-update');
+      }
+      if (cancelEditBtn) {
+        cancelEditBtn.style.display = "block";
+      }
+      
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
-    await addDoc(collection(db, "delivery_reports"), shiftReportData);
-    
-    alert("تم حفظ التقفيل في قاعدة البيانات بنجاح!");
-    btn.textContent = 'حفظ التقفيل في قاعدة البيانات';
-    btn.disabled = false;
-    
-    // اختيار اختياري: مسح المسودة المحلية بعد الرفع الناجح لقاعدة البيانات حتى لا تتكرر البيانات
-    localStorage.removeItem(DRAFT_KEY);
-    
-  } catch (error) {
-    console.error("Error saving document: ", error);
-    alert("حدث خطأ أثناء الحفظ! تأكد من اتصالك بالإنترنت.");
-    document.getElementById('saveToFirebaseBtn').disabled = false;
+  if (cancelEditBtn) {
+    cancelEditBtn.addEventListener('click', function() {
+      form.reset();
+      editingFirebaseId = null;
+      if (submitBtn) {
+        submitBtn.textContent = "حفظ العميل";
+        submitBtn.classList.remove('btn-update');
+      }
+      cancelEditBtn.style.display = "none";
+    });
   }
-});
 
-/* ---------- Init ---------- */
-// 1. استدعاء المسودة المخزنة أولاً
-loadLocalDraft();
+  // --- FORM SUBMISSION ---
+  
+  if (form) {
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault(); 
+      
+      const inputId = document.getElementById('custId').value.trim();
+      const inputPhone = document.getElementById('custPhone1').value.trim();
 
-// 2. إذا لم تكن هناك بيانات مخزنة، قم بإنشاء صف فارغ افتراضي للبدء
-if (deliveries.length === 0) { 
-  addDelivery(); 
-}
+      // Check for Unique ID and Phone Number
+      const isDuplicateId = customers.some(c => c.customerId === inputId && c.firebaseId !== editingFirebaseId);
+      const isDuplicatePhone = customers.some(c => c.phone1 === inputPhone && c.firebaseId !== editingFirebaseId);
 
-// 3. بناء الجدولين وحساب القيم
-renderDeliveries();
-renderExpenses();
-calcTotals();
+      if (isDuplicateId) {
+        alert("خطأ: كود العميل (ID) موجود مسبقاً لعميل آخر!");
+        return;
+      }
+      if (isDuplicatePhone) {
+        alert("خطأ: رقم الهاتف 1 مسجل مسبقاً لعميل آخر!");
+        return;
+      }
+      
+      // Gather data
+      const customerData = {
+        customerId: inputId,
+        name: document.getElementById('custName').value.trim(),
+        phone1: inputPhone,
+        phone2: document.getElementById('custPhone2').value.trim(),
+        address: document.getElementById('custAddress').value.trim(),
+        discount: document.getElementById('custDiscount').value,
+        notes: document.getElementById('custNotes').value.trim(),
+        timestamp: new Date().toISOString() 
+      };
+      
+      try {
+        if (editingFirebaseId) {
+          const docRef = doc(db, "customers", editingFirebaseId);
+          await updateDoc(docRef, customerData);
+          
+          // Update local array
+          const index = customers.findIndex(c => c.firebaseId === editingFirebaseId);
+          if(index !== -1) customers[index] = { ...customerData, firebaseId: editingFirebaseId };
+          
+          if (cancelEditBtn) cancelEditBtn.click(); // Reset form & UI
+        } else {
+          const docRef = await addDoc(collection(db, "customers"), customerData);
+          
+          // Add to local array
+          customers.push({ ...customerData, firebaseId: docRef.id });
+          
+          form.reset();
+        }
+        
+        renderTable();
+        
+      } catch (e) {
+        console.error("Error saving document: ", e);
+        alert("حدث خطأ أثناء الحفظ!");
+      }
+    });
+  }
 
-// 4. مستمع عام على مستوى الصفحة لمراقبة أي مدخلات نصية علوية (اسم المسؤول، التاريخ، الملاحظات) لحفظها فوراً
-document.addEventListener('input', saveLocalDraft);
-document.addEventListener('change', saveLocalDraft);
+  // --- EXPORT TO EXCEL ---
 
+  if (exportBtn) {
+    exportBtn.addEventListener('click', function() {
+      if (customers.length === 0) {
+        alert("لا توجد بيانات عملاء لتصديرها حالياً!");
+        return;
+      }
+
+      const headers = ["كود العميل (ID)", "اسم العميل", "رقم الهاتف 1", "رقم الهاتف 2", "العنوان / المنطقة", "نسبة الخصم", "ملاحظات إضافية"];
+      let csvContent = "\uFEFF"; 
+      
+      csvContent += headers.map(h => `"${h.replace(/"/g, '""')}"`).join(",") + "\r\n";
+
+      customers.forEach(cust => {
+        const row = [
+          cust.customerId || '',
+          cust.name || '',
+          cust.phone1 || '',
+          cust.phone2 || '',
+          cust.address || '',
+          (cust.discount || 0) + '%',
+          cust.notes || ''
+        ];
+        csvContent += row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",") + "\r\n";
+      });
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      
+      link.setAttribute("href", url);
+      link.setAttribute("download", `قاعدة_بيانات_العملاء_${new Date().toLocaleDateString('en-US')}.csv`);
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+  }
 </script>
 </body>
 </html>
