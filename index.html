@@ -9,43 +9,159 @@
   :root { --navy: #1a2a6b; --bg: #f3f4f7; --hover: #22368a; }
   body { margin: 0; font-family: 'Cairo', sans-serif; display: flex; height: 100vh; overflow: hidden; background: var(--bg); }
   
+  /* Overlay for mobile */
+  .overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 999;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .overlay.active {
+    display: block;
+    opacity: 1;
+  }
+
   /* Sidebar Styling */
-  .sidebar { width: 250px; background: var(--navy); color: white; display: flex; flex-direction: column; box-shadow: -2px 0 10px rgba(0,0,0,0.1); z-index: 10; }
-  .sidebar h2 { text-align: center; padding: 20px 0; border-bottom: 1px solid rgba(255,255,255,0.1); margin: 0; font-size: 18px; }
+  .sidebar {
+    width: 250px;
+    min-width: 250px;
+    background: var(--navy);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+    z-index: 1000;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+  
+  .sidebar h2 { text-align: center; padding: 20px 0; border-bottom: 1px solid rgba(255,255,255,0.1); margin: 0; font-size: 18px; position: relative; }
+  
+  /* Close Button for Mobile Inside Sidebar */
+  .close-btn { display: none; background: none; border: none; color: white; font-size: 24px; cursor: pointer; position: absolute; left: 10px; top: 15px; }
+
   .nav-btn { background: none; border: none; color: white; padding: 15px 20px; text-align: right; font-family: 'Cairo'; font-size: 16px; cursor: pointer; transition: 0.3s; border-bottom: 1px solid rgba(255,255,255,0.05); }
   .nav-btn:hover, .nav-btn.active { background: var(--hover); border-right: 4px solid #1b7a3a; }
   
-  /* Main Content iframe */
-  .content { flex: 1; display: flex; flex-direction: column; }
+  /* Main Content Area */
+  .content { flex: 1; display: flex; flex-direction: column; overflow: hidden; transition: all 0.3s ease; }
+  
+  /* Top Bar */
+  .top-bar {
+    display: flex;
+    align-items: center;
+    background: white;
+    padding: 10px 20px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    z-index: 10;
+  }
+  .toggle-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: var(--navy);
+    cursor: pointer;
+    margin-left: 15px;
+  }
+  .top-bar-title {
+    font-size: 16px;
+    color: var(--navy);
+    margin: 0;
+    font-weight: 600;
+  }
+
   iframe { flex: 1; width: 100%; border: none; }
+
+  /* --- Responsive Behavior --- */
+  
+  /* Desktop Collapse */
+  @media (min-width: 769px) {
+    .sidebar.collapsed {
+      margin-right: -250px;
+      transform: translateX(100%);
+      opacity: 0;
+    }
+  }
+
+  /* Mobile View */
+  @media (max-width: 768px) {
+    .sidebar {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      right: -250px; /* Hidden by default */
+      height: 100vh;
+    }
+    .sidebar.open {
+      right: 0; /* Slide in */
+    }
+    .close-btn {
+      display: block; /* Show close button */
+    }
+  }
 </style>
 </head>
 <body>
 
-  <div class="sidebar">
-    <h2>صيدليات شريف شعبان</h2>
+  <!-- Overlay for clicking outside to close on mobile -->
+  <div class="overlay" onclick="toggleSidebar()"></div>
+
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <h2>
+      صيدليات شريف شعبان
+      <button class="close-btn" onclick="toggleSidebar()">✖</button>
+    </h2>
     <button class="nav-btn active" onclick="loadApp('shift.html', this)">تقفيل الشيفت</button>
+	<button class="nav-btn" onclick="loadApp('invoices.html', this)">فواتير الموردين</button>
     <button class="nav-btn" onclick="loadApp('delivery.html', this)">تقفيل الدليفري</button>
-    <button class="nav-btn" onclick="loadApp('invoices.html', this)">فواتير الموردين</button>
     <button class="nav-btn" onclick="loadApp('customer.html', this)">إدارة العملاء</button>
-	<button class="nav-btn" onclick="createBackup()" style="color: #f59e0b;">إنشاء نسخة احتياطية</button>
-	<button class="nav-btn" onclick="showBackups()" style="color: #f59e0b;">استعادة نسخة احتياطية</button>
+    <button class="nav-btn" onclick="createBackup()" style="color: #f59e0b;">إنشاء نسخة احتياطية</button>
+    <button class="nav-btn" onclick="showBackups()" style="color: #f59e0b;">استعادة نسخة احتياطية</button>
   </div>
 
+  <!-- Main Content -->
   <div class="content">
+    <div class="top-bar">
+      <button class="toggle-btn" onclick="toggleSidebar()">☰</button>
+      <h3 class="top-bar-title">نظام الإدارة</h3>
+    </div>
     <iframe id="app-frame" src="shift.html"></iframe>
   </div>
 
 <script>
+  // Function to load the iframe and update active buttons
   function loadApp(file, btnElement) {
-    // Load the selected file into the iframe
     document.getElementById('app-frame').src = file;
     
     // Update active button styling
     document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
     btnElement.classList.add('active');
+
+    // Auto-close sidebar on mobile after clicking a link
+    if (window.innerWidth <= 768) {
+      document.getElementById('sidebar').classList.remove('open');
+      document.querySelector('.overlay').classList.remove('active');
+    }
   }
 
+  // Function to toggle sidebar (Open / Close)
+  function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.querySelector('.overlay');
+
+    if (window.innerWidth <= 768) {
+      // Mobile logic
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active');
+    } else {
+      // Desktop logic
+      sidebar.classList.toggle('collapsed');
+    }
+  }
 </script>
 </body>
 </html>
