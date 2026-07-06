@@ -592,8 +592,7 @@ select{
 <script type="module">
 /* ---------- Firebase Setup ---------- */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
-
+import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
@@ -747,9 +746,10 @@ function addDelivery(data={}){
   if(searchDeliveryPhone.value) {
     searchDeliveryPhone.value = '';
   }
-  $$('.input, textarea').forEach(el => {
-  el.addEventListener('input', saveLocalDraft);
-  });
+// To this:
+$$('.input, textarea').forEach(el => {
+  el.addEventListener('input', debounceCloudSave);
+});
 
   renderDeliveries();
 }
@@ -838,8 +838,8 @@ function calcTotals(){
   if(net >= 0){ netBox.classList.add('cash-positive'); } else { netBox.classList.remove('cash-positive'); }
 
   // إصلاح أساسي: حفظ مسودة البيانات محلياً فور حساب أي إجماليات جديدة تلقائياً
-  saveLocalDraft();
-
+debounceCloudSave();
+	
   return {count, totalMinutes, orderValue, cash, fees, net, expTotal, netAfter};
 }
 
@@ -987,8 +987,7 @@ $('#whatsappBtn').addEventListener('click', ()=>{
 $('#printBtn').addEventListener('click', ()=> window.print());
 $('#resetBtn').addEventListener('click', ()=>{
   if(!confirm('هل تريد مسح كل البيانات الحالية؟\nClear all current entries?')) return;
-  localStorage.removeItem(DRAFT_KEY); // تفريغ التخزين المحلي عند التصفير
-  deliveries = [];
+  setDoc(DRAFT_DOC_REF, {}); // Clears the cloud draft  deliveries = [];
   expenses = [];
   dId = 1; eId = 1;
   $('#shiftStart').value = '';
@@ -1055,58 +1054,92 @@ function escapeHtml(s){
     .replace(/>/g,'&gt;');
 }
 /* ---------- Firebase Save ---------- */
-document.getElementById('saveToFirebaseBtn')?.addEventListener('click', async () => {
-  const totals = calcTotals();
-  const signer = $('#signerName').value.trim();
-  const dateVal = $('#reportDate').value;
+/* ---------- Cloud Sync (Drafts) ---------- */
+// This will create a single document where the live shift data lives
+const DRAFT_DOC_REF = doc(db, "drafts", "current_active_shift");
 
-  if (!signer) {
-    alert("برجاء كتابة اسم المسؤول أولاً قبل الحفظ!");
-    return;
-  }
+let draftTimeout = null;
 
-  const shiftReportData = {
-    reportDate: dateVal,
-    signerName: signer,
-    shiftStart: $('#shiftStart').value,
-    shiftEnd: $('#shiftEnd').value,
-    extraNotes: $('#extraNotes').value,
-    deliveries: deliveries, 
-    expenses: expenses,     
-    totals: totals,         
-    timestamp: new Date().toISOString()
-  };
-
-  try {
-    const btn = document.getElementById('saveToFirebaseBtn');
-    btn.textContent = 'جاري الحفظ...';
-    btn.disabled = true;
-
-    await addDoc(collection(db, "delivery_reports"), shiftReportData);
-
-    alert("تم حفظ التقفيل في قاعدة البيانات بنجاح!");
-    btn.textContent = 'حفظ التقفيل في قاعدة البيانات';
-    btn.disabled = false;
-
-    // اختيار اختياري: مسح المسودة المحلية بعد الرفع الناجح لقاعدة البيانات حتى لا تتكرر البيانات
-    localStorage.removeItem(DRAFT_KEY);
-    
-  } catch (error) {
-    console.error("Error saving document: ", error);
-    alert("حدث خطأ أثناء الحفظ! تأكد من اتصالك بالإنترنت.");
-    document.getElementById('saveToFirebaseBtn').disabled = false;
-  }
-});
-
-/* ---------- Init ---------- */
-// 1. استدعاء المسودة المخزنة أولاً
-loadLocalDraft();
-
-// 2. إذا لم تكن هناك بيانات مخزنة، قم بإنشاء صف فارغ افتراضي للبدء
-if (deliveries.length === 0) { 
-  addDelivery(); 
+// Call this instead of saving directly so we don't spam the database on every keystroke
+function debounceCloudSave() {
+  if (draftTimeout) clearTimeout(draftTimeout);
+  draftTimeout = setTimeout(() => {
+    saveCloudDraft();
+  }, 1500); // Waits 1.5 seconds after typing stops
 }
 
+// Saves the entire page state to Firestore
+async function saveCloudDraft() {
+  const draft = {
+    handoverTime: $('#handoverTime')?.value || '',
+    reportDate: $('#reportDate')?.value || '',
+    shiftStart: $('#shiftStart')?.value || '',
+    shiftEnd: $('#shiftEnd')?.value || '',
+    extraNotes: $('#extraNotes')?.value || '',
+    signerName: $('#signerName')?.value || '',
+    deliveries: deliveries,
+    expenses: expenses,
+    dId: dId,
+    eId: eId,
+    lastUpdated: new Date().toISOString()
+  };
+  
+  try {
+    await setDoc(DRAFT_DOC_REF, draft);
+    console.log("Draft saved to cloud!");
+  } catch (e) {
+    console.error("Error saving cloud draft", e);
+  }
+}
+
+// Loads the draft back from Firestore when the page opens
+async function loadCloudDraft() {
+  try {
+    const docSnap = await getDoc(DRAFT_DOC_REF);
+    if (docSnap.exists()) {
+      const draft = docSnap.data();
+      if($('#reportDate')) $('#reportDate').value = draft.reportDate || '';
+      if($('#shiftStart')) $('#shiftStart').value = draft.shiftStart || '';
+      if($('#shiftEnd')) $('#shiftEnd').value = draft.shiftEnd || '';
+      if($('#extraNotes')) $('#extraNotes').value = draft.extraNotes || '';
+      if($('#signerName')) $('#signerName').value = draft.signerName || '';
+      if($('#handoverTime')) $('#handoverTime').value = draft.handoverTime || '';
+      deliveries = draft.deliveries || [];
+      expenses = draft.expenses || [];
+      dId = draft.dId || 1;
+      eId = draft.eId || 1;
+    }
+  } catch (e) {
+    console.error("Error restoring cloud draft", e);
+  }
+
+  // Ensure there is at least one blank row if empty
+  if (deliveries.length === 0) { 
+    addDelivery(); 
+  } else {
+    // If we loaded data, render it to the screen
+    renderDeliveries();
+    renderExpenses();
+    calcTotals();
+  }
+}
+
+/* ---------- Init ---------- */
+async function initializeShiftApp() {
+  // 1. Fetch from the cloud first and build the tables
+  await loadCloudDraft();
+
+  // 2. Global listeners to watch for top-level text inputs (name, date, notes)
+  document.addEventListener('input', (e) => {
+    if (e.target.matches('#signerName, #reportDate, #shiftStart, #shiftEnd, #extraNotes, #handoverTime')) {
+      debounceCloudSave();
+    }
+  });
+  document.addEventListener('change', debounceCloudSave);
+}
+
+// Start the app
+initializeShiftApp();
 // 3. بناء الجدولين وحساب القيم
 renderDeliveries();
 renderExpenses();
