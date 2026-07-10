@@ -265,20 +265,19 @@
                   <input type="number" inputmode="decimal" step="0.01" min="0" id="eInaya" class="form-input mt-2 epay-input" placeholder="0.00">
                 </div>
                 <!-- Other electronic -->
-                <div class="sm:col-span-2 lg:col-span-1 rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-3">
-                  <div class="grid grid-cols-1 gap-3">
-                    <div>
-                      <label class="form-label-ar" for="eOtherName">أخرى</label>
-                      <span class="form-label-en">Other: ______</span>
-                      <input type="text" id="eOtherName" class="form-input mt-2" placeholder="اسم الجهة / Provider">
-                    </div>
-                    <div>
-                      <label class="form-label-ar" for="eOtherAmount">المبلغ</label>
-                      <span class="form-label-en">Amount (EGP)</span>
-                      <input type="number" inputmode="decimal" step="0.01" min="0" id="eOtherAmount" class="form-input mt-2 epay-input" placeholder="0.00">
-                    </div>
-                  </div>
-                </div>
+				<div class="sm:col-span-2 lg:col-span-1 rounded-2xl border border-zinc-200 bg-zinc-50/80 px-4 py-3">
+				  <div class="flex items-center justify-between mb-3">
+				    <div>
+				      <span class="form-label-ar block font-bold">جهات أخرى</span>
+				      <span class="form-label-en text-xs text-zinc-500">Other Payments</span>
+				    </div>
+				    <button type="button" id="add-other-btn" class="text-xs bg-white border border-zinc-300 px-3 py-1.5 rounded-lg shadow-sm hover:bg-zinc-100 font-bold transition">
+				      + إضافة / Add
+				    </button>
+				  </div>
+				  <!-- Dynamic rows will be injected here -->
+				  <div id="otherPaymentsContainer" class="flex flex-col gap-3"></div>
+				</div>
               </div>
             </div>
 
@@ -539,431 +538,330 @@
 
   <!-- Toast -->
   <div id="toast-container" class="no-print fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] pointer-events-none"></div>
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, doc, setDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
 
-// ⚠️ ضع إعدادات فايربيز الخاصة بك هنا
+<script type="module">
+/* ---------- Firebase Setup ---------- */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+import { getFirestore, doc, setDoc, getDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "sherif-pharmacy.firebaseapp.com",
-  projectId: "sherif-pharmacy",
-  storageBucket: "sherif-pharmacy.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
+  apiKey: "AIzaSyCeVHkiZmMsweui1ZNAJKsTEJlNQYg3iuY",
+  authDomain: "pharm-7b71a.firebaseapp.com",
+  projectId: "pharm-7b71a",
+  storageBucket: "pharm-7b71a.firebasestorage.app",
+  messagingSenderId: "422760369118",
+  appId: "1:422760369118:web:79046658a5c6a84dea2b4f",
+  measurementId: "G-Y7GHKEGM1Z"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const DRAFT_DOC_REF = doc(db, "shift_drafts", "current_active_shift");
+const DRAFT_KEY = 'pharmacy_shift_local_draft';
 
-const LS_WA = 'ss_wa_number';
+/* ---------- Utilities ---------- */
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
 
-let invoices = [];
-let suppliers = [];
-let returns = [];
-let editId = null;
-
-// جلب البيانات من فايربيز عند فتح الصفحة
-async function loadDataFromFirebase() {
-  try {
-    // جلب الموردين
-    const supSnap = await getDocs(collection(db, "suppliers"));
-    if (!supSnap.empty) {
-      supSnap.forEach(doc => suppliers.push({ id: doc.id, ...doc.data() }));
-    } else {
-      // إذا كانت القائمة فارغة في فايربيز، يتم إضافة الموردين الافتراضيين
-      const defaultSuppliers = [
-        {name:'ابن سينا / Ibn Sina', type:'company'},
-        {name:'فارما أوفرسيز / Pharma Overseas', type:'company'},
-        {name:'المتحدة / United', type:'company'},
-        {name:'المصرية / El Masreya', type:'store'},
-        {name:'راميدا ستور / Rameda Store', type:'store'}
-      ];
-      for (const s of defaultSuppliers) {
-        const docRef = await addDoc(collection(db, "suppliers"), s);
-        suppliers.push({ id: docRef.id, ...s });
-      }
-    }
-
-    // جلب الفواتير
-    const invSnap = await getDocs(collection(db, "invoices"));
-    invSnap.forEach(doc => {
-      invoices.push({ id: doc.id, ...doc.data() });
-    });
-
-    refreshSuppliers();
-    renderList();
-  } catch (error) {
-    console.error("Error loading data:", error);
-    alert("خطأ في الاتصال بقاعدة البيانات");
-  }
-}
-
-document.addEventListener('DOMContentLoaded', loadDataFromFirebase);
-
-function fmt(n){ return Number(n||0).toFixed(2) }
-
-function refreshSuppliers(){
-  const sels = [document.getElementById('sup_name'), document.getElementById('f_supplier'), document.getElementById('st_supplier')];
-  sels.forEach((sel,i)=>{
-    if(!sel) return;
-    const val = sel.value;
-    sel.innerHTML = i===0 ? '' : '<option value="">كل الموردين / All</option>';
-    suppliers.forEach(s=>{
-      const o=document.createElement('option'); o.value=s.name; o.textContent=s.name; sel.appendChild(o);
-    });
-    if([...sel.options].some(o=>o.value===val)) sel.value=val;
-  });
-}
-
-document.getElementById('inv_date').valueAsDate = new Date();
-
-function toggleDiscountBox(){
-  const isCompany = document.getElementById('sup_type').value === 'company';
-  document.getElementById('discount_box').style.display = isCompany ? '' : 'none';
-}
-document.getElementById('sup_type').onchange = toggleDiscountBox;
-toggleDiscountBox();
-
-function getDiscVals(){
-  return {
-    d15: parseFloat(document.getElementById('d15').value)||0,
-    d18: parseFloat(document.getElementById('d18').value)||0,
-    d20: parseFloat(document.getElementById('d20').value)||0,
-    d25: parseFloat(document.getElementById('d25').value)||0
-  };
-}
-
-function calcDiscSum(){
-  const d = getDiscVals();
-  const sum = d.d15+d.d18+d.d20+d.d25;
-  const total = parseFloat(document.getElementById('inv_total').value)||0;
-  const remain = total - sum;
-  document.getElementById('disc_sum').textContent = fmt(sum);
-  const remEl = document.getElementById('disc_remain');
-  remEl.textContent = fmt(remain);
-  remEl.className = Math.abs(remain) < 0.01 ? 'ok' : 'warn';
-  return sum;
-}
-['d15','d18','d20','d25','inv_total'].forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener('input', ()=>{calcDiscSum(); calcTotals();}); });
-
-function renderReturns(){
-  const box = document.getElementById('returns_list');
-  box.innerHTML='';
-  returns.forEach((r,idx)=>{
-    const div=document.createElement('div'); div.className='return-row';
-    div.innerHTML = '<input placeholder="اسم الصنف" value="'+(r.name||'')+'" data-k="name" data-i="'+idx+'">'+
-    '<input type="number" placeholder="كمية" value="'+(r.qty||'')+'" data-k="qty" data-i="'+idx+'">'+
-    '<input type="number" step="0.01" placeholder="السعر" value="'+(r.price||'')+'" data-k="price" data-i="'+idx+'">'+
-    '<button class="btn btn-ghost btn-sm" data-del="'+idx+'">✕</button>';
-    box.appendChild(div);
-  });
-  box.querySelectorAll('input').forEach(inp=>{
-    inp.oninput = e=>{
-      const i=+e.target.dataset.i, k=e.target.dataset.k;
-      returns[i][k] = k==='name' ? e.target.value : parseFloat(e.target.value)||0;
-      calcTotals();
-    }
-  });
-  box.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{returns.splice(+b.dataset.del,1); renderReturns(); calcTotals();});
-  calcTotals();
-}
-
-function calcTotals(){
-  const total = parseFloat(document.getElementById('inv_total').value)||0;
-  const retTotal = returns.reduce((s,r)=>s + (parseFloat(r.qty)||0)*(parseFloat(r.price)||0),0);
-  document.getElementById('returns_total_txt').textContent = fmt(retTotal);
-  document.getElementById('net_payable_txt').textContent = fmt(total - retTotal);
-  calcDiscSum();
-  return {total, retTotal, net: total-retTotal};
-}
-document.getElementById('inv_total').oninput = calcTotals;
-document.getElementById('add_return_btn').onclick = ()=>{ returns.push({name:'',qty:1,price:0}); renderReturns(); };
-renderReturns();
-
-// حفظ مورد جديد في فايربيز
-document.getElementById('add_supplier_btn').onclick = async ()=>{
-  const name = prompt('اسم المورد الجديد / New supplier name:');
-  if(!name) return;
-  const type = document.getElementById('sup_type').value;
-  
-  try {
-      const newSup = { name, type };
-      const docRef = await addDoc(collection(db, "suppliers"), newSup);
-      suppliers.push({ id: docRef.id, ...newSup });
-      refreshSuppliers();
-      document.getElementById('sup_name').value = name;
-      toggleDiscountBox();
-  } catch (error) {
-      console.error("Error adding supplier:", error);
-      alert("حدث خطأ أثناء حفظ المورد");
-  }
+const fmt = (n) => {
+  const v = Number(n || 0);
+  return new Intl.NumberFormat('en-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
 };
+function num(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
 
-// حفظ الفاتورة في فايربيز
-document.getElementById('save_btn').onclick = async ()=>{
-  const calc = calcTotals();
-  const disc = getDiscVals();
-  const isCompany = document.getElementById('sup_type').value === 'company';
-  const discSum = disc.d15+disc.d18+disc.d20+disc.d25;
-  if(isCompany && Math.abs(discSum - calc.total) > 0.5){
-    if(!confirm('مجموع تقسيم الخصم ('+fmt(discSum)+') لا يساوي إجمالي الفاتورة ('+fmt(calc.total)+'). حفظ على أي حال؟')) return;
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'fixed bottom-5 left-1/2 -translate-x-1/2 pointer-events-auto bg-zinc-900 text-white text-[13px] font-[700] px-4 py-2.5 rounded-full shadow-lg z-50 transition duration-300';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=> { t.style.opacity='0'; t.style.transform='translate(-50%, 6px)'; }, 2100);
+  setTimeout(()=> t.remove(), 2500);
+}
+
+/* ---------- Row Generators ---------- */
+function expenseRow(data={amount:'', reason:''}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td data-label="المبلغ / Amount"><div class="cell-input-wrap"><input type="number" inputmode="decimal" step="0.01" min="0" class="form-input py-2 text-[13.5px] expense-amount" placeholder="0.00" value="${data.amount}"></div></td>
+    <td data-label="السبب / Reason"><div class="cell-input-wrap w-full"><input type="text" class="form-input py-2 text-[13.5px] expense-reason" placeholder="مثال: دليفري" value="${data.reason}"></div></td>
+    <td class="row-remove-td" style="text-align:left"><button type="button" class="row-remove-btn text-zinc-400 hover:text-rose-600 p-2">✕</button></td>
+  `;
+  tr.querySelector('.row-remove-btn').addEventListener('click', ()=> { tr.remove(); recalc(); });
+  tr.querySelectorAll('input').forEach(i=> i.addEventListener('input', recalc));
+  return tr;
+}
+
+function returnRow(data={mobile:'', invoice:'', reason:'', amount:''}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td data-label="رقم العميل"><div class="cell-input-wrap w-full"><input type="text" inputmode="tel" class="form-input py-2 text-[13.5px] ltr-field return-mobile" placeholder="01xxxxxxxxx" value="${data.mobile}"></div></td>
+    <td data-label="رقم الفاتورة"><div class="cell-input-wrap w-full"><input type="text" class="form-input py-2 text-[13.5px] ltr-field return-invoice" placeholder="#10293" value="${data.invoice}"></div></td>
+    <td data-label="السبب"><div class="cell-input-wrap w-full"><input type="text" class="form-input py-2 text-[13.5px] return-reason" placeholder="سبب المرتجع" value="${data.reason}"></div></td>
+    <td data-label="المبلغ"><div class="cell-input-wrap"><input type="number" inputmode="decimal" step="0.01" min="0" class="form-input py-2 text-[13.5px] return-amount" placeholder="0.00" value="${data.amount}"></div></td>
+    <td class="row-remove-td" style="text-align:left"><button type="button" class="row-remove-btn text-zinc-400 hover:text-rose-600 p-2">✕</button></td>
+  `;
+  tr.querySelector('.row-remove-btn').addEventListener('click', ()=> { tr.remove(); recalc(); });
+  tr.querySelectorAll('input').forEach(i=> i.addEventListener('input', recalc));
+  return tr;
+}
+
+function discountRow(data={mobile:'', amount:'', reason:''}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td data-label="رقم موبايل المريض"><div class="cell-input-wrap w-full"><input type="text" inputmode="tel" class="form-input py-2 text-[13.5px] ltr-field discount-mobile" placeholder="01xxxxxxxxx" value="${data.mobile}"></div></td>
+    <td data-label="قيمة الخصم"><div class="cell-input-wrap"><input type="number" inputmode="decimal" step="0.01" min="0" class="form-input py-2 text-[13.5px] discount-amount" placeholder="0.00" value="${data.amount}"></div></td>
+    <td data-label="السبب"><div class="cell-input-wrap w-full"><input type="text" class="form-input py-2 text-[13.5px] discount-reason" placeholder="سبب الخصم" value="${data.reason}"></div></td>
+    <td class="row-remove-td" style="text-align:left"><button type="button" class="row-remove-btn text-zinc-400 hover:text-rose-600 p-2">✕</button></td>
+  `;
+  tr.querySelector('.row-remove-btn').addEventListener('click', ()=> { tr.remove(); recalc(); });
+  tr.querySelectorAll('input').forEach(i=> i.addEventListener('input', recalc));
+  return tr;
+}
+
+function otherPaymentRow(data={name:'', amount:''}) {
+  const div = document.createElement('div');
+  div.className = 'other-payment-row relative p-3 border border-zinc-200 bg-white rounded-xl shadow-sm mb-2';
+  div.innerHTML = `
+    <button type="button" class="remove-other-btn absolute top-2 left-3 text-zinc-400 hover:text-rose-600 text-[16px]">✕</button>
+    <div class="grid grid-cols-1 gap-2 mt-3">
+      <div>
+        <label class="text-[11px] font-[700] text-zinc-500 block mb-1">الاسم / Provider Name</label>
+        <input type="text" class="form-input py-1.5 text-[13.5px] other-name" placeholder="اسم الجهة..." value="${data.name}">
+      </div>
+      <div>
+        <label class="text-[11px] font-[700] text-zinc-500 block mb-1">المبلغ / Amount</label>
+        <input type="number" inputmode="decimal" step="0.01" min="0" class="form-input py-1.5 text-[13.5px] other-amount" placeholder="0.00" value="${data.amount}">
+      </div>
+    </div>
+  `;
+  div.querySelector('.remove-other-btn').addEventListener('click', () => { div.remove(); recalc(); });
+  div.querySelectorAll('input').forEach(i => i.addEventListener('input', recalc));
+  return div;
+}
+
+/* ---------- Buttons & Events ---------- */
+$('#add-expense-btn')?.addEventListener('click', ()=> { $('#expensesTbody').appendChild(expenseRow()); recalc(); });
+$('#add-return-btn')?.addEventListener('click', ()=> { $('#returnsTbody').appendChild(returnRow()); recalc(); });
+$('#add-discount-btn')?.addEventListener('click', ()=> { $('#discountsTbody').appendChild(discountRow()); recalc(); });
+$('#add-other-btn')?.addEventListener('click', ()=> { $('#otherPaymentsContainer').appendChild(otherPaymentRow()); recalc(); });
+
+/* ---------- Calculations ---------- */
+let isInitializing = true; // Lock to prevent saving while loading
+
+function recalc() {
+  const nv = (id) => num(document.getElementById(id)?.value);
+  
+  const cash = nv('cashTotal');
+  const fawry = nv('eFawry');
+  const superpay = nv('eSuperpay');
+  const instapay = nv('eInstapay');
+  const wallet = nv('eWallet');
+  const inaya = nv('eInaya');
+
+  let otherAmt = 0;
+  $$('.other-payment-row .other-amount').forEach(i=> otherAmt += num(i.value));
+
+  const electronicTotal = fawry + superpay + instapay + wallet + inaya + otherAmt;
+  const salesTotal = cash + electronicTotal;
+
+  let expensesTotal = 0;
+  $$('#expensesTbody .expense-amount').forEach(i=> expensesTotal += num(i.value));
+
+  let returnsTotal = 0;
+  $$('#returnsTbody .return-amount').forEach(i=> returnsTotal += num(i.value));
+
+  let discountsTotal = 0;
+  $$('#discountsTbody .discount-amount').forEach(i=> discountsTotal += num(i.value));
+
+  const netCash = cash - expensesTotal;
+
+  if($('#electronicTotalOut')) $('#electronicTotalOut').innerHTML = fmt(electronicTotal) + ' EGP';
+  if($('#salesTotalOut')) $('#salesTotalOut').innerHTML = fmt(salesTotal) + ' EGP';
+  if($('#expensesTotalOut')) $('#expensesTotalOut').textContent = fmt(expensesTotal) + ' EGP';
+  if($('#returnsTotalOut')) $('#returnsTotalOut').textContent = fmt(returnsTotal) + ' EGP';
+  if($('#discountsTotalOut')) $('#discountsTotalOut').textContent = fmt(discountsTotal) + ' EGP';
+  if($('#netCashOut')) $('#netCashOut').innerHTML = fmt(netCash) + ' EGP';
+
+  if($('#summarySales')) $('#summarySales').textContent = fmt(salesTotal) + ' EGP';
+  if($('#summaryReturns')) $('#summaryReturns').textContent = fmt(returnsTotal) + ' EGP';
+  if($('#summaryDiscounts')) $('#summaryDiscounts').textContent = fmt(discountsTotal) + ' EGP';
+
+  // Trigger saves when calculations update
+  if (!isInitializing) {
+    saveLocalDraft();
+    debounceCloudSave();
   }
-  
-  const invData = {
-    supplier_type: document.getElementById('sup_type').value,
-    supplier_name: document.getElementById('sup_name').value,
-    invoice_no: document.getElementById('inv_no').value.trim(),
-    date: document.getElementById('inv_date').value,
-    total: calc.total, returns_total: calc.retTotal, net_payable: calc.net,
-    d15: isCompany?disc.d15:0, d18: isCompany?disc.d18:0, d20: isCompany?disc.d20:0, d25: isCompany?disc.d25:0,
-    returns: JSON.parse(JSON.stringify(returns)),
-    notes: document.getElementById('inv_notes').value,
-    created_at: new Date().toISOString()
-  };
-  
-  if(!invData.supplier_name || !invData.invoice_no || !invData.date){ alert('اكمل اسم المورد ورقم الفاتورة والتاريخ'); return; }
-  
-  const btn = document.getElementById('save_btn');
-  btn.textContent = 'جاري الحفظ...';
-  btn.disabled = true;
+}
 
-  try {
-      if(editId){ 
-          await setDoc(doc(db, "invoices", String(editId)), invData);
-          invData.id = editId;
-          invoices = invoices.map(x=>x.id===editId?invData:x); 
-          editId=null; 
-      } else { 
-          const docRef = await addDoc(collection(db, "invoices"), invData);
-          invData.id = docRef.id;
-          invoices.push(invData); 
-      }
-      
-      document.getElementById('save_msg').textContent = 'تم الحفظ ✓ / Saved';
-      setTimeout(()=>document.getElementById('save_msg').textContent='',2000);
-      document.getElementById('inv_no').value=''; document.getElementById('inv_total').value=''; document.getElementById('inv_notes').value='';
-      ['d15','d18','d20','d25'].forEach(id=>document.getElementById(id).value=0);
-      returns=[]; renderReturns(); calcTotals();
-      renderList();
-  } catch (error) {
-      console.error("Error saving invoice:", error);
-      alert("حدث خطأ أثناء حفظ الفاتورة");
-  } finally {
-      btn.textContent = 'حفظ الفاتورة';
-      btn.disabled = false;
-  }
-};
-
-document.getElementById('reset_btn').onclick = ()=>{ editId=null; document.getElementById('inv_no').value=''; document.getElementById('inv_total').value=''; document.getElementById('inv_notes').value=''; ['d15','d18','d20','d25'].forEach(id=>document.getElementById(id).value=0); returns=[]; renderReturns(); };
-
-// Tabs
-document.querySelectorAll('.tabbtn').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('.tabbtn').forEach(x=>x.classList.remove('active')); b.classList.add('active');
-  ['add','list','statement'].forEach(t=>document.getElementById('tab-'+t).classList.toggle('hide', b.dataset.tab!==t));
-  if(b.dataset.tab==='list') renderList();
-  if(b.dataset.tab==='statement') refreshSuppliers();
+// Attach listeners to static inputs
+['cashTotal','eFawry','eSuperpay','eInstapay','eWallet','eInaya','pharmacistName','closingDate','shiftStart','shiftEnd','notes'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('input', recalc);
 });
 
-// List
-function renderList(){
-  const q = (document.getElementById('f_search').value||'').toLowerCase();
-  const sup = document.getElementById('f_supplier').value;
-  const from = document.getElementById('f_from').value;
-  const to = document.getElementById('f_to').value;
-  let rows = invoices.filter(inv=>{
-    if(sup && inv.supplier_name!==sup) return false;
-    if(from && inv.date < from) return false;
-    if(to && inv.date > to) return false;
-    if(q && !(inv.supplier_name.toLowerCase().includes(q) || inv.invoice_no.toLowerCase().includes(q))) return false;
-    return true;
-  }).sort((a,b)=>b.date.localeCompare(a.date));
-  const tb = document.querySelector('#inv_table tbody');
-  tb.innerHTML = rows.map(inv=>{
-    const discTxt = inv.supplier_type==='company' ? (inv.d15||0).toFixed(0)+'/'+(inv.d18||0).toFixed(0)+'/'+(inv.d20||0).toFixed(0)+'/'+(inv.d25||0).toFixed(0) : '—';
-    return '<tr>'+
-    '<td>'+inv.date+'</td><td>'+inv.supplier_name+'</td><td>'+(inv.supplier_type==='company'?'شركة':'مخزن')+'</td><td>'+inv.invoice_no+'</td>'+
-    '<td>'+fmt(inv.total)+'</td><td>'+fmt(inv.returns_total)+'</td><td><b>'+fmt(inv.net_payable)+'</b></td>'+
-    '<td class="small">'+discTxt+'</td>'+
-    '<td class="no-print"><button class="btn btn-ghost btn-sm" onclick="editInv(\''+inv.id+'\')">تعديل</button> '+
-    '<button class="btn btn-ghost btn-sm" onclick="delInv(\''+inv.id+'\')">حذف</button></td>'+
-  '</tr>'
-  }).join('') || '<tr><td colspan="9" class="muted">لا توجد فواتير</td></tr>';
-  document.getElementById('list_count').textContent = rows.length + ' فاتورة';
-  document.getElementById('list_gross').textContent = fmt(rows.reduce((s,x)=>s+x.total,0));
-  document.getElementById('list_ret').textContent = fmt(rows.reduce((s,x)=>s+x.returns_total,0));
-  document.getElementById('list_net').textContent = fmt(rows.reduce((s,x)=>s+x.net_payable,0));
-}
-['f_search','f_supplier','f_from','f_to'].forEach(id=>{ const el=document.getElementById(id); if(el) el.oninput=renderList; });
-
-window.editInv = (id)=>{
-  const inv = invoices.find(x=>x.id===id); if(!inv) return;
-  editId = id;
-  document.getElementById('sup_type').value = inv.supplier_type;
-  refreshSuppliers(); document.getElementById('sup_name').value = inv.supplier_name;
-  document.getElementById('inv_no').value = inv.invoice_no;
-  document.getElementById('inv_date').value = inv.date;
-  document.getElementById('inv_total').value = inv.total;
-  document.getElementById('inv_notes').value = inv.notes||'';
-  document.getElementById('d15').value = inv.d15||0;
-  document.getElementById('d18').value = inv.d18||0;
-  document.getElementById('d20').value = inv.d20||0;
-  document.getElementById('d25').value = inv.d25||0;
-  returns = JSON.parse(JSON.stringify(inv.returns||[])); renderReturns();
-  toggleDiscountBox();
-  document.querySelector('[data-tab="add"]').click();
-  window.scrollTo(0,0);
-};
-
-// مسح فاتورة من فايربيز
-window.delInv = async (id)=>{ 
-  if(confirm('حذف الفاتورة؟')){ 
-    try {
-        await deleteDoc(doc(db, "invoices", String(id)));
-        invoices = invoices.filter(x=>x.id!==id); 
-        renderList(); 
-    } catch(error) {
-        alert("حدث خطأ أثناء الحذف");
-    }
-  }
-};
-
-// Statement
-function calcStatementCash(){
-  const sum15 = parseFloat(document.getElementById('sum_d15').dataset.val||0);
-  const sum18 = parseFloat(document.getElementById('sum_d18').dataset.val||0);
-  const sum20 = parseFloat(document.getElementById('sum_d20').dataset.val||0);
-  const sum25 = parseFloat(document.getElementById('sum_d25').dataset.val||0);
-  const c15 = parseFloat(document.getElementById('cash15').value)||0;
-  const c18 = parseFloat(document.getElementById('cash18').value)||0;
-  const c20 = parseFloat(document.getElementById('cash20').value)||0;
-  const c25 = parseFloat(document.getElementById('cash25').value)||0;
-  const n15 = sum15 * (1 - c15/100);
-  const n18 = sum18 * (1 - c18/100);
-  const n20 = sum20 * (1 - c20/100);
-  const n25 = sum25 * (1 - c25/100);
-  document.getElementById('net_d15').textContent = fmt(n15);
-  document.getElementById('net_d18').textContent = fmt(n18);
-  document.getElementById('net_d20').textContent = fmt(n20);
-  document.getElementById('net_d25').textContent = fmt(n25);
-  const totalNet = n15+n18+n20+n25;
-  document.getElementById('sum_net_cash').textContent = fmt(totalNet);
-  const returnsTotal = parseFloat(document.getElementById('st_returns').textContent)||0;
-  document.getElementById('cash_payable').textContent = fmt(totalNet - returnsTotal);
-  return totalNet - returnsTotal;
-}
-['cash15','cash18','cash20','cash25'].forEach(id=>{ document.getElementById(id).oninput = calcStatementCash; });
-
-document.getElementById('run_statement_btn').onclick = ()=>{
-  const sup = document.getElementById('st_supplier').value;
-  const stype = document.getElementById('st_type').value;
-  const from = document.getElementById('st_from').value;
-  const to = document.getElementById('st_to').value;
-  let rows = invoices.filter(inv=>{
-    if(sup && inv.supplier_name!==sup) return false;
-    if(stype && inv.supplier_type!==stype) return false;
-    if(from && inv.date < from) return false;
-    if(to && inv.date > to) return false;
-    return true;
-  });
-  const gross = rows.reduce((s,x)=>s+x.total,0);
-  const ret = rows.reduce((s,x)=>s+x.returns_total,0);
-  const net = rows.reduce((s,x)=>s+x.net_payable,0);
-  const sum15 = rows.reduce((s,x)=>s+(x.d15||0),0);
-  const sum18 = rows.reduce((s,x)=>s+(x.d18||0),0);
-  const sum20 = rows.reduce((s,x)=>s+(x.d20||0),0);
-  const sum25 = rows.reduce((s,x)=>s+(x.d25||0),0);
-  document.getElementById('st_count').textContent = rows.length;
-  document.getElementById('st_gross').textContent = fmt(gross);
-  document.getElementById('st_returns').textContent = fmt(ret);
-  document.getElementById('st_net').textContent = fmt(net);
-  function setSum(id,val){ const el=document.getElementById(id); el.textContent=fmt(val); el.dataset.val=val; }
-  setSum('sum_d15', sum15); setSum('sum_d18', sum18); setSum('sum_d20', sum20); setSum('sum_d25', sum25);
-  document.getElementById('sum_disc_total').textContent = fmt(sum15+sum18+sum20+sum25);
-  calcStatementCash();
-  document.querySelector('#st_table tbody').innerHTML = rows.map(r=>'<tr><td>'+r.date+'</td><td>'+r.supplier_name+'</td><td>'+r.invoice_no+'</td><td>'+fmt(r.d15||0)+'</td><td>'+fmt(r.d18||0)+'</td><td>'+fmt(r.d20||0)+'</td><td>'+fmt(r.d25||0)+'</td><td>'+fmt(r.net_payable)+'</td></tr>').join('') || '<tr><td colspan="8" class="muted">لا توجد نتائج</td></tr>';
-  document.getElementById('st_results').classList.remove('hide');
-  window._st_summary = {sup: sup||'كل الموردين', from: from||'-', to: to||'-', count: rows.length,
-    gross, ret, net,
-    d15:sum15, d18:sum18, d20:sum20, d25:sum25,
-    cash_payable: calcStatementCash()
+/* ---------- Data Scraping for Save ---------- */
+function getFormData() {
+  const gv = (id) => document.getElementById(id)?.value || '';
+  
+  return {
+    cash: gv('cashTotal'), fawry: gv('eFawry'), superpay: gv('eSuperpay'),
+    insta: gv('eInstapay'), wallet: gv('eWallet'), inaya: gv('eInaya'),
+    pharmacist: gv('pharmacistName'), date: gv('closingDate'),
+    start: gv('shiftStart'), end: gv('shiftEnd'), notes: gv('notes'),
+    
+    expenses: $$('#expensesTbody tr').map(tr => ({
+      amount: tr.querySelector('.expense-amount')?.value, reason: tr.querySelector('.expense-reason')?.value
+    })).filter(r => r.amount || r.reason),
+    
+    returns: $$('#returnsTbody tr').map(tr => ({
+      mobile: tr.querySelector('.return-mobile')?.value, invoice: tr.querySelector('.return-invoice')?.value,
+      reason: tr.querySelector('.return-reason')?.value, amount: tr.querySelector('.return-amount')?.value
+    })).filter(r => r.amount || r.mobile || r.reason),
+    
+    discounts: $$('#discountsTbody tr').map(tr => ({
+      mobile: tr.querySelector('.discount-mobile')?.value, amount: tr.querySelector('.discount-amount')?.value,
+      reason: tr.querySelector('.discount-reason')?.value
+    })).filter(r => r.amount || r.mobile),
+    
+    others: $$('.other-payment-row').map(row => ({
+      name: row.querySelector('.other-name')?.value, amount: row.querySelector('.other-amount')?.value
+    })).filter(r => r.amount || r.name)
   };
-};
+}
 
-// WA
-const waInput = document.getElementById('wa_number');
-waInput.value = localStorage.getItem(LS_WA)||'';
-waInput.oninput = ()=>localStorage.setItem(LS_WA, waInput.value);
-document.getElementById('wa_btn').onclick = ()=>{
-  const s = window._st_summary; if(!s){ alert('اعمل عرض الكشف أولا'); return; }
-  const msg = 'كشف حساب مورد - صيدليات شريف شعبان\nالمورد: '+s.sup+'\nالفترة: '+s.from+' إلى '+s.to+'\nعدد الفواتير: '+s.count+'\nإجمالي: '+s.gross.toFixed(2)+' ج.م\nمرتجعات: '+s.ret.toFixed(2)+' ج.م\nتفصيل الخصم: 15%='+s.d15.toFixed(2)+' | 18%='+s.d18.toFixed(2)+' | 20%='+s.d20.toFixed(2)+' | 25%='+s.d25.toFixed(2)+'\nصافي المستحق: '+s.net.toFixed(2)+' ج.م\nصافي الدفع النقدي: '+s.cash_payable.toFixed(2)+' ج.م';
-  const num = waInput.value.replace(/[^0-9]/g,'');
-  const url = num ? 'https://wa.me/'+num+'?text='+encodeURIComponent(msg) : 'https://wa.me/?text='+encodeURIComponent(msg);
-  window.open(url, '_blank');
-};
+/* ---------- Local + Cloud Sync Logic ---------- */
 
-// Export CSV
-document.getElementById('export_csv_btn').onclick = ()=>{
-  const rows = invoices;
-  let csv = 'Date,Supplier,Type,Invoice No,Total,Returns,Net,D15,D18,D20,D25,Notes\n';
-  rows.forEach(r=>{ csv += [r.date, '"'+r.supplier_name+'"', r.supplier_type, r.invoice_no, r.total, r.returns_total, r.net_payable, r.d15||0, r.d18||0, r.d20||0, r.d25||0, '"'+(r.notes||'').replace(/"/g,'""')+'"'].join(',')+'\n'; });
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='invoices_sherif_shaaban.csv'; a.click();
-};
+// 1. Save Instantly to Browser Storage
+function saveLocalDraft() {
+  const data = getFormData();
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+}
 
-// JSON backup
-document.getElementById('export_json_btn').onclick = ()=>{
-  const blob = new Blob([JSON.stringify({invoices, suppliers}, null, 2)], {type:'application/json'});
-  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='invoices_backup_'+new Date().toISOString().slice(0,10)+'.json'; a.click();
-};
+// 2. Debounced save to Firebase Cloud
+let draftTimeout = null;
+function debounceCloudSave() {
+  if (draftTimeout) clearTimeout(draftTimeout);
+  draftTimeout = setTimeout(() => {
+    saveCloudDraft();
+  }, 1500); // Waits 1.5s after typing
+}
 
-document.getElementById('import_json_input').onchange = async (e) =>{
-  const f=e.target.files[0]; if(!f) return;
-  const reader = new FileReader();
-  reader.onload = async ()=>{
-    try{
-      const data = JSON.parse(reader.result);
-      const incoming = data.invoices || data || [];
-      let added=0;
-      for (const inv of incoming) {
-        const key = (inv.supplier_name||'')+'|'+(inv.invoice_no||'')+'|'+(inv.date||'');
-        const exists = invoices.some(x => (x.supplier_name+'|'+x.invoice_no+'|'+x.date)===key);
-        if(!exists){ 
-          const docRef = await addDoc(collection(db, "invoices"), inv);
-          inv.id = docRef.id;
-          invoices.push(inv); 
-          added++; 
-        }
-      }
-      if(data.suppliers){ 
-        for (const s of data.suppliers) {
-            if(!suppliers.find(x=>x.name===s.name)) {
-                const docRef = await addDoc(collection(db, "suppliers"), s);
-                suppliers.push({id: docRef.id, ...s});
-            }
-        }
-      }
-      refreshSuppliers(); renderList();
-      alert('تم الاستيراد بنجاح. فواتير جديدة: '+added);
-    }catch(err){ alert('ملف غير صالح: '+err.message); }
-  };
-  reader.readAsText(f);
-};
-
-// مسح الكل من فايربيز
-document.getElementById('clear_all_btn').onclick = async ()=>{
-  if(confirm('مسح كل فواتير الموردين؟ لا يمكن التراجع') && confirm('تأكيد نهائي؟')){
-    try {
-        for (const inv of invoices) {
-            await deleteDoc(doc(db, "invoices", String(inv.id)));
-        }
-        invoices=[]; 
-        renderList(); 
-        alert('تم مسح جميع الفواتير من قاعدة البيانات بنجاح.');
-    } catch(err) {
-        alert("حدث خطأ أثناء المسح");
-    }
+async function saveCloudDraft() {
+  const data = getFormData();
+  data.lastUpdated = new Date().toISOString();
+  try {
+    await setDoc(DRAFT_DOC_REF, data);
+    console.log("Draft saved to Firebase cloud!");
+  } catch (e) {
+    console.error("Error saving cloud draft", e);
   }
-};
+}
+
+// 3. Load logic
+function populateFormWithData(data) {
+  if (!data) return;
+  const setVal = (id, val) => { if (document.getElementById(id)) document.getElementById(id).value = val || ''; };
+  
+  setVal('cashTotal', data.cash); setVal('eFawry', data.fawry); setVal('eSuperpay', data.superpay);
+  setVal('eInstapay', data.insta); setVal('eWallet', data.wallet); setVal('eInaya', data.inaya);
+  setVal('pharmacistName', data.pharmacist); setVal('closingDate', data.date);
+  setVal('shiftStart', data.start); setVal('shiftEnd', data.end); setVal('notes', data.notes);
+
+  if (data.expenses?.length > 0) {
+    $('#expensesTbody').innerHTML = '';
+    data.expenses.forEach(item => $('#expensesTbody').appendChild(expenseRow(item)));
+  }
+  if (data.returns?.length > 0) {
+    $('#returnsTbody').innerHTML = '';
+    data.returns.forEach(item => $('#returnsTbody').appendChild(returnRow(item)));
+  }
+  if (data.discounts?.length > 0) {
+    $('#discountsTbody').innerHTML = '';
+    data.discounts.forEach(item => $('#discountsTbody').appendChild(discountRow(item)));
+  }
+  if (data.others?.length > 0) {
+    $('#otherPaymentsContainer').innerHTML = '';
+    data.others.forEach(item => $('#otherPaymentsContainer').appendChild(otherPaymentRow(item)));
+  }
+}
+
+function loadLocalDraft() {
+  const saved = localStorage.getItem(DRAFT_KEY);
+  if (saved) {
+    try {
+      populateFormWithData(JSON.parse(saved));
+      console.log("Loaded instantly from LocalStorage");
+    } catch (e) { console.error(e); }
+  }
+}
+
+/* ---------- App Initialization ---------- */
+async function initializeShiftApp() {
+  isInitializing = true;
+  
+  // 1. Instantly load from local storage so the page never blinks blank on refresh
+  loadLocalDraft();
+  
+  // 2. Ensure minimum empty rows exist if tables are completely empty
+  if(!$('#expensesTbody').children.length) $('#expensesTbody').appendChild(expenseRow());
+  if(!$('#returnsTbody').children.length) $('#returnsTbody').appendChild(returnRow());
+  if(!$('#discountsTbody').children.length) $('#discountsTbody').appendChild(discountRow());
+  if(!$('#otherPaymentsContainer').children.length) $('#otherPaymentsContainer').appendChild(otherPaymentRow());
+
+  // 3. Do initial calculations
+  recalc();
+  
+  // 4. Unlock saving
+  isInitializing = false;
+  
+  // Optional: Try fetching from cloud to see if there's newer data from another device
+  try {
+    const docSnap = await getDoc(DRAFT_DOC_REF);
+    if (docSnap.exists() && !localStorage.getItem(DRAFT_KEY)) {
+      populateFormWithData(docSnap.data());
+      recalc();
+    }
+  } catch (e) {}
+}
+
+// Start app
+initializeShiftApp();
+
+// Catch-all event listeners just like your requested code
+document.addEventListener('input', (e) => {
+  if (e.target.matches('input, textarea, select')) {
+    saveLocalDraft();
+    debounceCloudSave();
+  }
+});
+
+/* ---------- Reset & WhatsApp ---------- */
+$('#reset-btn')?.addEventListener('click', async () => {
+  if(!confirm('هل تريد مسح كل بيانات النموذج؟ / Clear the entire form?')) return;
+  
+  // Clear inputs
+  document.querySelectorAll('input, textarea').forEach(el => el.value = '');
+  
+  // Reset tables
+  $('#expensesTbody').innerHTML = ''; $('#expensesTbody').appendChild(expenseRow());
+  $('#returnsTbody').innerHTML = ''; $('#returnsTbody').appendChild(returnRow());
+  $('#discountsTbody').innerHTML = ''; $('#discountsTbody').appendChild(discountRow());
+  $('#otherPaymentsContainer').innerHTML = ''; $('#otherPaymentsContainer').appendChild(otherPaymentRow());
+  
+  // Clear Memory
+  localStorage.removeItem(DRAFT_KEY);
+  try { await deleteDoc(DRAFT_DOC_REF); } catch(e){}
+  
+  recalc();
+  showToast('تم مسح النموذج');
+});
+
+$('#recalc-btn')?.addEventListener('click', ()=> { recalc(); showToast('تم إعادة الحساب'); });
+$('#print-btn')?.addEventListener('click', ()=> window.print());
+$('#pdf-btn')?.addEventListener('click', ()=> window.print());
+
 </script>
+<script>(function(){document.addEventListener("click",function(e){var a=e.target.closest("[data-product-id]");if(!a)return;e.preventDefault();var pid=a.getAttribute("data-product-id");if(pid)parent.postMessage({type:"ecto-artifact-link-click",productId:pid},"*")})})();</script>
+<script>(function(){var loc=location.href.replace(/#.*$/,"");var ATTR_NAMES=["data-product-id","data-productid","data-product_id","product-id","productid","product_id","data-source-entity-id","source-entity-id","source_entity_id","data-product","data-metadata","data-meta"];var DATASET_KEYS=["productId","productid","product_id","sourceEntityId","sourceentityid","source_entity_id","product","metadata","meta"];function readProductId(value){if(typeof value!=="string"||value.length===0)return null;if(/^[0-9]{6,}$/.test(value))return value;var match=value.match(/(?:product(?:_|-)?id|source(?:_|-)?entity(?:_|-)?id)["'=:\s]+([0-9]{6,})/i);return match?match[1]:null}function extractProductId(start){for(var node=start;node&&node!==document.body;node=node.parentElement){for(var i=0;i<ATTR_NAMES.length;i++){var attrValue=node.getAttribute&&node.getAttribute(ATTR_NAMES[i]);var attrProductId=readProductId(attrValue);if(attrProductId)return attrProductId}var dataset=node.dataset||null;if(dataset){for(var j=0;j<DATASET_KEYS.length;j++){var dataValue=dataset[DATASET_KEYS[j]];var dataProductId=readProductId(dataValue);if(dataProductId)return dataProductId}}}return null}document.addEventListener("click",function(e){var target=e.target instanceof Element?e.target:null;if(!target)return;var a=target.closest?target.closest("a[href]"):null;if(!a||!a.href||!/^https?:\/\//.test(a.href))return;if(a.href.replace(/#.*$/,"")===loc)return;var productId=extractProductId(target)||extractProductId(a);if(!productId)return;e.preventDefault();parent.postMessage({type:"ecto-artifact-link-click",productId:productId},"*")},true)})();</script></body>
 </html>
